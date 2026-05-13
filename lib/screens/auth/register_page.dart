@@ -25,7 +25,10 @@ class _RegisterPageState extends State<RegisterPage> {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/register/volunteer'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
         body: jsonEncode({
           'name': _nameController.text,
           'username': _usernameController.text,
