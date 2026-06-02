@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'login_page.dart';
+import 'login_page.dart'; // Import login page dinamis
 
 class RoleSelectionPage extends StatelessWidget {
   @override
@@ -53,13 +53,15 @@ class RoleSelectionPage extends StatelessWidget {
                 _buildRoleCard(
                   context,
                   title: "Login sebagai Donatur",
-                  icon: Icons.monetization_on_rounded, // Placeholder icon
+                  icon: Icons.monetization_on_rounded,
                   iconColor: Colors.amber,
                   onTap: () {
-                    // Navigasi ke halaman Login Donatur
+                    // Masuk ke Login dengan role Donatur
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => LoginPage()),
+                      MaterialPageRoute(
+                        builder: (context) => const LoginPage(role: 'Donatur'),
+                      ),
                     );
                   },
                 ),
@@ -69,10 +71,16 @@ class RoleSelectionPage extends StatelessWidget {
                 _buildRoleCard(
                   context,
                   title: "Login sebagai Penerima",
-                  icon: Icons.shopping_bag_rounded, // Placeholder icon
+                  icon: Icons.shopping_bag_rounded,
                   iconColor: Colors.orange,
                   onTap: () {
-                    // TODO: Arahkan ke Login Penerima
+                    // Masuk ke Login dengan role Penerima
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginPage(role: 'Penerima'),
+                      ),
+                    );
                   },
                 ),
                 const SizedBox(height: 20),
@@ -81,10 +89,16 @@ class RoleSelectionPage extends StatelessWidget {
                 _buildRoleCard(
                   context,
                   title: "Login sebagai Volunteer",
-                  icon: Icons.eco_rounded, // Placeholder icon
+                  icon: Icons.eco_rounded,
                   iconColor: Colors.teal,
                   onTap: () {
-                    // TODO: Arahkan ke Login Volunteer
+                    // Masuk ke Login dengan role Relawan
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginPage(role: 'Relawan'),
+                      ),
+                    );
                   },
                 ),
               ],

@@ -1,39 +1,12 @@
 import 'package:flutter/material.dart';
-import 'register_page.dart';
-import 'register_receiver_page.dart';
-import 'register_volunteer_page.dart';
 
-class LoginPage extends StatefulWidget {
-  final String role; // Parameter untuk mengetahui siapa yang sedang login
-
-  const LoginPage({Key? key, required this.role}) : super(key: key);
-
+class RegisterVolunteerPage extends StatefulWidget {
   @override
-  _LoginPageState createState() => _LoginPageState();
+  _RegisterVolunteerPageState createState() => _RegisterVolunteerPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _RegisterVolunteerPageState extends State<RegisterVolunteerPage> {
   bool _isPasswordVisible = false;
-
-  void _navigateToRegister() {
-    // Arahkan ke halaman register yang sesuai berdasarkan role
-    if (widget.role == 'Penerima') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => RegisterReceiverPage()),
-      );
-    } else if (widget.role == 'Relawan') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => RegisterVolunteerPage()),
-      );
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => RegisterPage()),
-      ); // Donatur
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,9 +17,9 @@ class _LoginPageState extends State<LoginPage> {
           children: [
             // Header Melengkung
             ClipPath(
-              clipper: HeaderClipper(),
+              clipper: RegisterHeaderClipper(),
               child: Container(
-                height: 230,
+                height: 180,
                 width: double.infinity,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -71,14 +44,13 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           onPressed: () => Navigator.pop(context),
                         ),
-                        const SizedBox(height: 10),
                         const Padding(
                           padding: EdgeInsets.only(left: 14.0),
                           child: Text(
-                            "Login",
+                            "Register Relawan",
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 32,
+                              fontSize: 30,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
@@ -90,72 +62,74 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
 
-            // Form Section
+            // Form Section untuk Volunteer
             Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 10.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Teks dinamis menyesuaikan role
-                  Text(
-                    "Halo, ${widget.role}",
-                    style: const TextStyle(
-                      fontSize: 26,
+                  const Text(
+                    "Gabung Jadi Relawan",
+                    style: TextStyle(
+                      fontSize: 22,
                       fontWeight: FontWeight.w800,
                       color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Silakan login untuk melanjutkan",
+                    "Lengkapi data diri dan kendaraan Anda",
                     style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 30),
 
-                  const Text(
-                    "Email",
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
+                  _buildLabel("Nama Lengkap"),
+                  _buildTextField("Masukkan nama lengkap Anda"),
+
+                  _buildLabel("Email"),
+                  _buildTextField(
+                    "Masukkan email aktif",
                     keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      hintText: "Masukkan email",
-                      hintStyle: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 14,
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 16,
-                      ),
-                    ),
                   ),
-                  const SizedBox(height: 20),
 
-                  const Text(
-                    "Password",
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black87,
-                    ),
+                  _buildLabel("No. Handphone (WhatsApp)"),
+                  _buildTextField(
+                    "Masukkan nomor WhatsApp aktif",
+                    keyboardType: TextInputType.phone,
                   ),
-                  const SizedBox(height: 8),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel("Tipe Kendaraan"),
+                            _buildTextField("Cth: Motor Matic"),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel("Plat Nomor"),
+                            _buildTextField("Cth: B 1234 XYZ"),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  _buildLabel("Password"),
                   TextFormField(
                     obscureText: !_isPasswordVisible,
                     decoration: InputDecoration(
-                      hintText: "Masukkan password",
+                      hintText: "Buat password",
                       hintStyle: TextStyle(
                         color: Colors.grey[400],
                         fontSize: 14,
@@ -186,22 +160,9 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
 
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () {},
-                      child: const Text(
-                        "Lupa Password?",
-                        style: TextStyle(
-                          color: Color(0xFF56AB2F),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
+                  const SizedBox(height: 30),
 
-                  const SizedBox(height: 16),
-
+                  // Button Register
                   Container(
                     width: double.infinity,
                     height: 55,
@@ -227,10 +188,10 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       onPressed: () {
-                        // TODO: Implement Login Logic
+                        // TODO: Implement API Register Volunteer
                       },
                       child: const Text(
-                        "Login",
+                        "Daftar Sekarang",
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -240,14 +201,14 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
 
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 24),
 
                   Center(
                     child: GestureDetector(
-                      onTap: _navigateToRegister, // Memanggil fungsi dinamis
+                      onTap: () => Navigator.pop(context),
                       child: RichText(
                         text: TextSpan(
-                          text: "Belum punya akun? ",
+                          text: "Sudah punya akun? ",
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 14,
@@ -255,7 +216,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           children: const [
                             TextSpan(
-                              text: "Register",
+                              text: "Login",
                               style: TextStyle(
                                 color: Color(0xFF56AB2F),
                                 fontWeight: FontWeight.w800,
@@ -266,6 +227,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
@@ -274,18 +236,57 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
+
+  Widget _buildLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0, top: 16.0),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+    String hint, {
+    int maxLines = 1,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return TextFormField(
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+        filled: true,
+        fillColor: Colors.grey[100],
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
+        ),
+      ),
+    );
+  }
 }
 
-class HeaderClipper extends CustomClipper<Path> {
+class RegisterHeaderClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
     Path path = Path();
-    path.lineTo(0, size.height - 50);
+    path.lineTo(0, size.height - 40);
     path.quadraticBezierTo(
       size.width / 2,
       size.height + 20,
       size.width,
-      size.height - 50,
+      size.height - 40,
     );
     path.lineTo(size.width, 0);
     path.close();
