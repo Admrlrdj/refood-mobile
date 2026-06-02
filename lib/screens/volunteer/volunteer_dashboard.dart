@@ -33,7 +33,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
               ),
               Switch(
                 value: isActive,
-                activeColor: const Color(0xFF10B981),
+                activeThumbColor: const Color(0xFF10B981),
                 onChanged: (val) => setState(() => isActive = val),
               ),
             ],

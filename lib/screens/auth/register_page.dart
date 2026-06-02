@@ -1,180 +1,289 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../../core/api_config.dart'; 
 
 class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
-
   @override
-  State<RegisterPage> createState() => _RegisterPageState();
+  _RegisterPageState createState() => _RegisterPageState();
 }
 
 class _RegisterPageState extends State<RegisterPage> {
-  final _nameController = TextEditingController();
-  final _usernameController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _vehicleController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _latController = TextEditingController();
-  final _lngController = TextEditingController();
-  bool _isLoading = false;
-
-  Future<void> _register() async {
-    setState(() => _isLoading = true);
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/register/volunteer'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'name': _nameController.text,
-          'username': _usernameController.text,
-          'password': _passwordController.text,
-          'phone': _phoneController.text,
-          'vehicle_type': _vehicleController.text,
-          'latitude': _latController.text.isNotEmpty
-              ? double.parse(_latController.text)
-              : null,
-          'longitude': _lngController.text.isNotEmpty
-              ? double.parse(_lngController.text)
-              : null,
-        }),
-      );
-
-      if (response.statusCode == 201) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Pendaftaran Berhasil! Menunggu Verifikasi Admin."),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context);
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Gagal mendaftar. Username mungkin sudah dipakai."),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Koneksi Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-    setState(() => _isLoading = false);
-  }
+  bool _isPasswordVisible = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Pendaftaran Relawan")),
+      backgroundColor: Colors.white,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: "Nama Lengkap",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _usernameController,
-              decoration: const InputDecoration(
-                labelText: "Username",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: "No. WhatsApp",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _vehicleController,
-              decoration: const InputDecoration(
-                labelText: "Jenis Kendaraan (Misal: Motor Beat)",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _latController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Latitude",
-                      border: OutlineInputBorder(),
+            // Header Melengkung
+            ClipPath(
+              clipper: RegisterHeaderClipper(),
+              child: Container(
+                height: 180, // Dibuat sedikit lebih pendek agar form muat
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF86D538), Color(0xFF2E7D32)],
+                  ),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 10,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.arrow_back_ios,
+                            color: Colors.white,
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.only(left: 14.0),
+                          child: Text(
+                            "Register",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _lngController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Longitude",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            TextButton.icon(
-              onPressed: () {
-                _latController.text = "-6.5976";
-                _lngController.text = "106.7996";
-              },
-              icon: const Icon(Icons.my_location),
-              label: const Text("Gunakan Lokasi Saat Ini"),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 30),
-            _isLoading
-                ? const CircularProgressIndicator()
-                : SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _register,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 15),
+
+            // Form Section sesuai dengan Collection donors di MongoDB
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 10.0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Daftar Akun Donatur",
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Lengkapi data diri dan restoran Anda",
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // Nama Restoran (restaurant_name)
+                  _buildLabel("Nama Restoran / Toko"),
+                  _buildTextField("Masukkan nama restoran atau usaha"),
+
+                  // Nama Lengkap (name)
+                  _buildLabel("Nama Lengkap PIC"),
+                  _buildTextField("Masukkan nama lengkap Anda"),
+
+                  // Email (email)
+                  _buildLabel("Email"),
+                  _buildTextField(
+                    "Masukkan email aktif",
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+
+                  // No HP (phone)
+                  _buildLabel("No. Handphone"),
+                  _buildTextField(
+                    "Masukkan nomor handphone",
+                    keyboardType: TextInputType.phone,
+                  ),
+
+                  // Alamat (address)
+                  _buildLabel("Alamat Lengkap"),
+                  _buildTextField("Masukkan alamat lengkap", maxLines: 3),
+
+                  // Password
+                  _buildLabel("Password"),
+                  TextFormField(
+                    obscureText: !_isPasswordVisible,
+                    decoration: InputDecoration(
+                      hintText: "Buat password",
+                      hintStyle: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 14,
                       ),
-                      child: const Text("DAFTAR SEKARANG"),
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 16,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _isPasswordVisible
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                          color: Colors.grey[500],
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isPasswordVisible = !_isPasswordVisible;
+                          });
+                        },
+                      ),
                     ),
                   ),
+
+                  const SizedBox(height: 30),
+
+                  // Button Register
+                  Container(
+                    width: double.infinity,
+                    height: 55,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(30),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF86D538), Color(0xFF4CAF50)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF4CAF50).withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      onPressed: () {
+                        // TODO: Implement API Register ke MongoDB
+                      },
+                      child: const Text(
+                        "Daftar Sekarang",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Teks Login
+                  Center(
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context); // Kembali ke halaman login
+                      },
+                      child: RichText(
+                        text: TextSpan(
+                          text: "Sudah punya akun? ",
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          children: const [
+                            TextSpan(
+                              text: "Login",
+                              style: TextStyle(
+                                color: Color(0xFF56AB2F),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0, top: 16.0),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+    String hint, {
+    int maxLines = 1,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return TextFormField(
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+        filled: true,
+        fillColor: Colors.grey[100],
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
+        ),
+      ),
+    );
+  }
+}
+
+class RegisterHeaderClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    Path path = Path();
+    path.lineTo(0, size.height - 40);
+    path.quadraticBezierTo(
+      size.width / 2,
+      size.height + 20,
+      size.width,
+      size.height - 40,
+    );
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }

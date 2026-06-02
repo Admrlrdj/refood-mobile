@@ -1,6 +1,6 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
-import 'screens/splash_screen.dart'; // Panggil file splash screen
+// Pastikan path import ini sesuai dengan lokasi file splash_screen.dart kamu
+import 'screens/splash_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -12,13 +12,15 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'RE-FOOD Mobile',
-      debugShowCheckedModeBanner: false,
+      title: 'RE-FOOD',
+      debugShowCheckedModeBanner:
+          false, // Menghilangkan banner tulisan "DEBUG" di pojok kanan atas
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-        useMaterial3: true,
+        primarySwatch: Colors.green,
+        scaffoldBackgroundColor: Colors.white,
       ),
-      home: const SplashScreen(),
+      // Di sini kita mengatur agar SplashScreen yang pertama kali muncul
+      home: SplashScreen(),
     );
   }
 }

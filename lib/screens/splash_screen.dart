@@ -3,20 +3,19 @@ import 'dart:async';
 import 'landing_page.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
-
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  _SplashScreenState createState() => _SplashScreenState();
 }
 
 class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    // Pindah ke Landing Page setelah 3 detik
     Timer(const Duration(seconds: 3), () {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const LandingPage()),
+        MaterialPageRoute(builder: (context) => LandingPage()),
       );
     });
   }
@@ -24,23 +23,40 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.green,
-      body: Center(
-        child: Column(
+      body: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF86D538), // Hijau kekuningan terang
+              Color(0xFF56AB2F), // Hijau daun
+            ],
+          ),
+        ),
+        child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.restaurant_menu, size: 100, color: Colors.white),
-            SizedBox(height: 20),
+          children: [
             Text(
-              "RE-FOOD",
+              "RE",
               style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
+                fontSize: 54,
+                fontWeight: FontWeight.w900,
                 color: Colors.white,
+                height: 1.0,
+                letterSpacing: 1.5,
               ),
             ),
-            SizedBox(height: 10),
-            CircularProgressIndicator(color: Colors.white),
+            Text(
+              "food",
+              style: TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                height: 1.0,
+              ),
+            ),
           ],
         ),
       ),
