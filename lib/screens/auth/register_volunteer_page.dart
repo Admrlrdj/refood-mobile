@@ -108,7 +108,7 @@ class _RegisterVolunteerPageState extends State<RegisterVolunteerPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _buildLabel("Tipe Kendaraan"),
-                            _buildTextField("Cth: Motor Matic"),
+                            _buildTextField("Cth: Vario 125, Beat, dll."),
                           ],
                         ),
                       ),
