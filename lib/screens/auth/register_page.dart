@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../../core/api_config.dart';
 
 class RegisterPage extends StatefulWidget {
   @override
@@ -7,19 +10,120 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage> {
   bool _isPasswordVisible = false;
+  bool _isLoading = false;
+
+  // 1. Deklarasi Controller untuk mengambil input teks dari user
+  final TextEditingController _restaurantNameController =
+      TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  // 2. Fungsi untuk menembak API Register Donatur ke Laravel
+  Future<void> _handleRegister() async {
+    // Validasi form kosong
+    if (_nameController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Mohon lengkapi semua data wajib!"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/register/donor'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'name': _nameController.text,
+          'restaurant_name': _restaurantNameController.text,
+          'email': _emailController.text,
+          'phone': _phoneController.text,
+          'address': _addressController.text,
+          'password': _passwordController.text,
+        }),
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 201) {
+        // Jika sukses register (201 Created)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Registrasi Berhasil! Silakan Login."),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Otomatis kembali ke halaman Login
+        Navigator.pop(context);
+      } else {
+        // Jika gagal (misal email sudah terdaftar / error validasi 422)
+        String errorMessage = "Registrasi Gagal.";
+        if (responseData['errors'] != null) {
+          // Mengambil pesan error pertama dari validasi Laravel
+          errorMessage = responseData['errors'].values.first[0];
+        } else if (responseData['message'] != null) {
+          errorMessage = responseData['message'];
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Terjadi kesalahan koneksi: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _restaurantNameController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      // Solusi untuk mencegah overflow saat keyboard muncul:
+      resizeToAvoidBottomInset: true,
       body: SingleChildScrollView(
+        // Menambahkan physics agar bisa di-scroll dengan mulus meskipun mentok
+        physics: const BouncingScrollPhysics(),
         child: Column(
           children: [
             // Header Melengkung
             ClipPath(
               clipper: RegisterHeaderClipper(),
               child: Container(
-                height: 180, // Dibuat sedikit lebih pendek agar form muat
+                height: 180,
                 width: double.infinity,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -62,12 +166,14 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
             ),
 
-            // Form Section sesuai dengan Collection donors di MongoDB
+            // Form Section
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24.0,
-                vertical: 10.0,
-              ),
+              padding: const EdgeInsets.fromLTRB(
+                24.0,
+                10.0,
+                24.0,
+                40.0,
+              ), // Padding bawah diperbesar agar tidak mentok
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -86,35 +192,43 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 30),
 
-                  // Nama Restoran (restaurant_name)
+                  // Pasang Controller ke masing-masing TextField
                   _buildLabel("Nama Restoran / Toko"),
-                  _buildTextField("Masukkan nama restoran atau usaha"),
+                  _buildTextField(
+                    "Masukkan nama restoran atau usaha",
+                    controller: _restaurantNameController,
+                  ),
 
-                  // Nama Lengkap (name)
                   _buildLabel("Nama Lengkap PIC"),
-                  _buildTextField("Masukkan nama lengkap Anda"),
+                  _buildTextField(
+                    "Masukkan nama lengkap Anda",
+                    controller: _nameController,
+                  ),
 
-                  // Email (email)
                   _buildLabel("Email"),
                   _buildTextField(
                     "Masukkan email aktif",
+                    controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                   ),
 
-                  // No HP (phone)
                   _buildLabel("No. Handphone"),
                   _buildTextField(
                     "Masukkan nomor handphone",
+                    controller: _phoneController,
                     keyboardType: TextInputType.phone,
                   ),
 
-                  // Alamat (address)
                   _buildLabel("Alamat Lengkap"),
-                  _buildTextField("Masukkan alamat lengkap", maxLines: 3),
+                  _buildTextField(
+                    "Masukkan alamat lengkap",
+                    controller: _addressController,
+                    maxLines: 3,
+                  ),
 
-                  // Password
                   _buildLabel("Password"),
                   TextFormField(
+                    controller: _passwordController,
                     obscureText: !_isPasswordVisible,
                     decoration: InputDecoration(
                       hintText: "Buat password",
@@ -175,17 +289,19 @@ class _RegisterPageState extends State<RegisterPage> {
                           borderRadius: BorderRadius.circular(30),
                         ),
                       ),
-                      onPressed: () {
-                        // TODO: Implement API Register ke MongoDB
-                      },
-                      child: const Text(
-                        "Daftar Sekarang",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                      onPressed: _isLoading
+                          ? null
+                          : _handleRegister, // Panggil API
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                              "Daftar Sekarang",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
                   ),
 
@@ -218,7 +334,6 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 40),
                 ],
               ),
             ),
@@ -244,10 +359,12 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Widget _buildTextField(
     String hint, {
+    required TextEditingController controller,
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
   }) {
     return TextFormField(
+      controller: controller, // Ambil data
       maxLines: maxLines,
       keyboardType: keyboardType,
       decoration: InputDecoration(
