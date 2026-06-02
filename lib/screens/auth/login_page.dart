@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../core/api_config.dart';
 import 'register_page.dart';
 import 'register_receiver_page.dart';
 import 'register_volunteer_page.dart';
+// Nantinya import dashboard sesuai role di sini:
+// import '../donor/donor_dashboard.dart';
 
 class LoginPage extends StatefulWidget {
-  final String role; // Parameter untuk mengetahui siapa yang sedang login
+  final String role; // 'Donatur', 'Penerima', atau 'Relawan'
 
   const LoginPage({Key? key, required this.role}) : super(key: key);
 
@@ -14,9 +21,13 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   bool _isPasswordVisible = false;
+  bool _isLoading = false;
+
+  // Controllers untuk mengambil inputan text
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   void _navigateToRegister() {
-    // Arahkan ke halaman register yang sesuai berdasarkan role
     if (widget.role == 'Penerima') {
       Navigator.push(
         context,
@@ -31,7 +42,74 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => RegisterPage()),
-      ); // Donatur
+      );
+    }
+  }
+
+  // FUNGSI LOGIN KE LARAVEL
+  Future<void> _handleLogin() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    // Ubah nama role di UI menjadi format yang dimengerti API (donor, receiver, volunteer)
+    String apiRole = 'donor';
+    if (widget.role == 'Penerima') apiRole = 'receiver';
+    if (widget.role == 'Relawan') apiRole = 'volunteer';
+
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/login'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'email': _emailController.text,
+          'password': _passwordController.text,
+          'role': apiRole,
+        }),
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        // Jika Sukses, Simpan Token
+        String token = responseData['access_token'];
+
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', token);
+        await prefs.setString('user_role', apiRole);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Login Berhasil!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // TODO: Arahkan ke Dashboard masing-masing
+        // Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => DonorDashboard()));
+      } else {
+        // Menampilkan pesan error dari Backend (misal: Akun belum diverifikasi, password salah)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(responseData['message'] ?? "Login Gagal"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Terjadi kesalahan koneksi: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -42,7 +120,6 @@ class _LoginPageState extends State<LoginPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Header Melengkung
             ClipPath(
               clipper: HeaderClipper(),
               child: Container(
@@ -90,13 +167,11 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
 
-            // Form Section
             Padding(
               padding: const EdgeInsets.all(24.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Teks dinamis menyesuaikan role
                   Text(
                     "Halo, ${widget.role}",
                     style: const TextStyle(
@@ -122,6 +197,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
+                    controller: _emailController, // Pasang Controller
                     keyboardType: TextInputType.emailAddress,
                     decoration: InputDecoration(
                       hintText: "Masukkan email",
@@ -153,6 +229,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
+                    controller: _passwordController, // Pasang Controller
                     obscureText: !_isPasswordVisible,
                     decoration: InputDecoration(
                       hintText: "Masukkan password",
@@ -226,17 +303,19 @@ class _LoginPageState extends State<LoginPage> {
                           borderRadius: BorderRadius.circular(30),
                         ),
                       ),
-                      onPressed: () {
-                        // TODO: Implement Login Logic
-                      },
-                      child: const Text(
-                        "Login",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                      onPressed: _isLoading
+                          ? null
+                          : _handleLogin, // Panggil fungsi API
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                              "Login",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
                   ),
 
@@ -244,7 +323,7 @@ class _LoginPageState extends State<LoginPage> {
 
                   Center(
                     child: GestureDetector(
-                      onTap: _navigateToRegister, // Memanggil fungsi dinamis
+                      onTap: _navigateToRegister,
                       child: RichText(
                         text: TextSpan(
                           text: "Belum punya akun? ",
