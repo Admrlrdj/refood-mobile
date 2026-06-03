@@ -9,6 +9,16 @@ class ReceiverDashboard extends StatefulWidget {
 
 class _ReceiverDashboardState extends State<ReceiverDashboard> {
   int _selectedIndex = 0;
+  bool _isLoading = false; // Bisa diubah ke true jika nanti sudah disambung API
+
+  final String _receiverName = "Panti Asuhan";
+
+  // Data Dummy Summary
+  final Map<String, dynamic> _summary = {
+    'waiting': 0,
+    'active': 2,
+    'history': 15,
+  };
 
   // Daftar data *dummy* untuk rekomendasi makanan
   final List<Map<String, dynamic>> _foodRecommendations = [
@@ -35,269 +45,342 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
     },
   ];
 
-  @override
-  Widget build(BuildContext context) {
-    // Definisi warna utama
-    const Color primaryColor = Color(0xFF56AB2F);
-    const Color backgroundColor = Color(0xFFF9FBF8);
-
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              _buildBanner(),
-              _buildMenuGrid(primaryColor),
-              _buildSectionTitle("Rekomendasi Makanan", primaryColor),
-              _buildHorizontalFoodList(primaryColor),
-              const SizedBox(height: 30), // Padding bawah tambahan
-            ],
-          ),
+  Widget _buildHomeContent() {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.only(top: 100.0),
+          child: CircularProgressIndicator(color: Color(0xFF2E7D32)),
         ),
-      ),
-      bottomNavigationBar: _buildBottomNavigationBar(primaryColor),
-    );
-  }
+      );
+    }
 
-  // --- WIDGET HELPERS ---
-
-  // 1. Header (Profil dan Sapaan)
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              const CircleAvatar(
-                radius: 24,
-                backgroundImage: NetworkImage(
-                  'https://ui-avatars.com/api/?name=Panti+Asuhan&background=56AB2F&color=fff',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Halo, Panti Asuhan 👋",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  Text(
-                    "Siap menerima kebaikan hari ini?",
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 5,
-                ),
-              ],
-            ),
-            child: IconButton(
-              icon: const Icon(
-                Icons.notifications_none_rounded,
-                color: Colors.black87,
-              ),
-              onPressed: () {
-                // TODO: Aksi notifikasi
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 2. Banner Informasi Utama
-  Widget _buildBanner() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(20.0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Banner Utama (Sama dengan Donatur)
           Container(
             width: double.infinity,
-            height: 140,
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
               gradient: const LinearGradient(
-                colors: [Color(0xFF86D538), Color(0xFF4CAF50)],
+                colors: [Color(0xFF86D538), Color(0xFF2E7D32)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
+              borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
                   color: const Color(0xFF4CAF50).withOpacity(0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
-            child: Stack(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
+                const Text(
+                  "Butuh Bantuan Makanan?",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Temukan donasi makanan berlebih di sekitarmu dan jemput kebaikan hari ini.",
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF2E7D32),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                  ),
+                  onPressed: () {
+                    // TODO: Aksi untuk eksplor/peta makanan
+                  },
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      Icon(Icons.search_rounded, size: 20),
+                      SizedBox(width: 8),
                       Text(
-                        "Jemput\nMakanan\nSekarang",
+                        "Cari Makanan",
                         style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
                           fontWeight: FontWeight.w800,
-                          height: 1.2,
+                          fontSize: 14,
                         ),
                       ),
                     ],
                   ),
                 ),
-                Positioned(
-                  right: 10,
-                  bottom: -10,
-                  child: Icon(
-                    Icons.delivery_dining_rounded,
-                    size: 130,
-                    color: Colors.white.withOpacity(0.3),
-                  ),
-                ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          // Indikator Carousel (titik-titik)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [_buildDot(true), _buildDot(false), _buildDot(false)],
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildDot(bool isActive) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      height: 6,
-      width: isActive ? 16 : 6,
-      decoration: BoxDecoration(
-        color: isActive ? const Color(0xFF56AB2F) : Colors.grey[300],
-        borderRadius: BorderRadius.circular(10),
-      ),
-    );
-  }
-
-  // 3. Grid Menu Aksi
-  Widget _buildMenuGrid(Color primaryColor) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _buildMenuItem(
-            Icons.takeout_dining_rounded,
-            "Ambil\nSendiri",
-            primaryColor,
-          ),
-          _buildMenuItem(
-            Icons.two_wheeler_rounded,
-            "Diantar\nRelawan",
-            primaryColor,
-          ),
-          _buildMenuItem(Icons.history_rounded, "Riwayat", primaryColor),
-          _buildMenuItem(Icons.menu_book_rounded, "Edukasi", primaryColor),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(IconData icon, String title, Color color) {
-    return Column(
-      children: [
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Icon(icon, color: color, size: 28),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey[800],
-            height: 1.2,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // 4. Judul Section (Rekomendasi Makanan)
-  Widget _buildSectionTitle(String title, Color primaryColor) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
+          const SizedBox(height: 28),
+          const Text(
+            "Ringkasan Anda",
+            style: TextStyle(
               fontSize: 18,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w800,
               color: Colors.black87,
             ),
           ),
-          Text(
-            "Lihat Semua",
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: primaryColor,
-            ),
+          const SizedBox(height: 16),
+
+          // 3 Kartu Ringkasan (Sama dengan Donatur)
+          Row(
+            children: [
+              _buildSummaryCard(
+                count: _summary['history'].toString(),
+                label: "Riwayat",
+                gradientColors: [
+                  const Color(0xFFFB923C),
+                  const Color(0xFFEA580C),
+                ],
+              ),
+              const SizedBox(width: 12),
+              _buildSummaryCard(
+                count: _summary['active'].toString(),
+                label: "Diproses",
+                gradientColors: [
+                  const Color(0xFF4ADE80),
+                  const Color(0xFF16A34A),
+                ],
+              ),
+              const SizedBox(width: 12),
+              _buildSummaryCard(
+                count: _summary['waiting'].toString(),
+                label: "Menunggu",
+                gradientColors: [
+                  const Color(0xFF60A5FA),
+                  const Color(0xFF2563EB),
+                ],
+              ),
+            ],
           ),
+
+          const SizedBox(height: 32),
+
+          // Section Rekomendasi (Mirip "Aktivitas Terkini" di Donatur)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Rekomendasi Makanan",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black87,
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  // TODO: Aksi lihat semua
+                },
+                child: const Text(
+                  "Lihat Semua",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF56AB2F),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Memakai list horizontal gaya Receiver tapi diadaptasi ke UI Donatur
+          _buildHorizontalFoodList(),
         ],
       ),
     );
   }
 
-  // 5. Horizontal List Rekomendasi Makanan
-  Widget _buildHorizontalFoodList(Color primaryColor) {
+  @override
+  Widget build(BuildContext context) {
+    // Daftar halaman untuk Bottom Navigation
+    final List<Widget> pages = [
+      _buildHomeContent(),
+      const Center(
+        child: Text("Halaman Riwayat Penerima"),
+      ), // Ganti dengan komponen History nanti
+      const Center(
+        child: Text("Halaman Profil Penerima"),
+      ), // Ganti dengan komponen Profil nanti
+    ];
+
+    return Scaffold(
+      backgroundColor: const Color(
+        0xFFF4F6F8,
+      ), // Background abu-abu terang standar Donatur
+      appBar: _selectedIndex == 0
+          ? AppBar(
+              backgroundColor: Colors.white,
+              elevation: 0,
+              automaticallyImplyLeading: false,
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Halo, $_receiverName 👋",
+                    style: const TextStyle(
+                      color: Colors.black87,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const Text(
+                    "Siap menerima kebaikan hari ini?",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.notifications_none_rounded,
+                    color: Colors.black87,
+                  ),
+                  onPressed: () {},
+                ),
+              ],
+            )
+          : null,
+      body: IndexedStack(index: _selectedIndex, children: pages),
+
+      // Bottom Navigation disamakan strukturnya (3 Tab: Beranda, Riwayat, Profil)
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF2E7D32),
+          unselectedItemColor: Colors.grey[400],
+          selectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+          ),
+          type: BottomNavigationBarType.fixed,
+          elevation: 0,
+          onTap: (index) => setState(() {
+            _selectedIndex = index;
+          }),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_rounded),
+              label: "Beranda",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long_rounded),
+              label: "Riwayat",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_rounded),
+              label: "Profil",
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- HELPER WIDGETS ---
+
+  Widget _buildSummaryCard({
+    required String count,
+    required String label,
+    required List<Color> gradientColors,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: gradientColors[1].withOpacity(0.4),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              count,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                height: 1.1,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.white.withOpacity(0.95),
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHorizontalFoodList() {
     return SizedBox(
       height: 250,
       child: ListView.builder(
-        padding: const EdgeInsets.only(left: 20),
+        // Menghilangkan padding agar rata kiri sesuai style Donatur
+        padding: EdgeInsets.zero,
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: _foodRecommendations.length,
@@ -308,11 +391,15 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
             margin: const EdgeInsets.only(right: 16, bottom: 10),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(
+                16,
+              ), // Rounded sama dengan aktivitas Donatur
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.15),
-                  blurRadius: 8,
+                  color: Colors.black.withOpacity(
+                    0.02,
+                  ), // Bayangan soft khas Donatur UI
+                  blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
               ],
@@ -323,17 +410,16 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                 // Gambar Makanan
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(20),
+                    top: Radius.circular(16),
                   ),
                   child: Image.network(
                     food['image'],
                     height: 110,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    // Error builder agar tidak crash jika gambar gagal dimuat
                     errorBuilder: (context, error, stackTrace) => Container(
                       height: 110,
-                      color: Colors.grey[300],
+                      color: Colors.grey[200],
                       child: const Icon(Icons.fastfood, color: Colors.grey),
                     ),
                   ),
@@ -343,18 +429,17 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Judul Makanan
                       Text(
                         food['name'],
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
                           fontSize: 14,
+                          color: Colors.black87,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      // Lokasi
+                      const SizedBox(height: 6),
                       Row(
                         children: [
                           Icon(
@@ -369,6 +454,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                               style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -377,37 +463,37 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      // Waktu Ketersediaan
                       Text(
                         food['time'],
                         style: const TextStyle(
                           fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.orange,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFEA580C),
                         ),
                       ),
                       const SizedBox(height: 12),
-                      // Tombol Ambil
                       SizedBox(
                         width: double.infinity,
                         height: 32,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
+                            backgroundColor: const Color(
+                              0xFFF1F6D2,
+                            ), // Warna soft hijau button
+                            foregroundColor: const Color(
+                              0xFF2E7D32,
+                            ), // Teks hijau tua
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
                             elevation: 0,
                           ),
-                          onPressed: () {
-                            // TODO: Aksi ambil makanan
-                          },
+                          onPressed: () {},
                           child: const Text(
                             "Ambil",
                             style: TextStyle(
                               fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
@@ -419,54 +505,6 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  // 6. Bottom Navigation Bar
-  Widget _buildBottomNavigationBar(Color primaryColor) {
-    return Container(
-      decoration: BoxDecoration(
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        child: BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: primaryColor,
-          unselectedItemColor: Colors.grey[400],
-          currentIndex: _selectedIndex,
-          onTap: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded),
-              label: 'Beranda',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.search_rounded),
-              label: 'Cari',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.map_outlined),
-              label: 'Peta',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline_rounded),
-              label: 'Profil',
-            ),
-          ],
-        ),
       ),
     );
   }

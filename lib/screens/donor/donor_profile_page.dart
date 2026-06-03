@@ -4,7 +4,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../../core/api_config.dart';
-import 'edit_profile_page.dart'; // Import Halaman Edit Profil
+import 'edit_profile_page.dart';
+import 'settings_page.dart';
 
 class DonorProfilePage extends StatefulWidget {
   final VoidCallback onBackPressed;
@@ -277,6 +278,25 @@ class _DonorProfilePageState extends State<DonorProfilePage> {
                             _buildMenuCard(
                               icon: Icons.settings_rounded,
                               title: "Pengaturan",
+                              onTap: () async {
+                                // Navigasi ke halaman Settings
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => SettingsPage(
+                                      currentUsername:
+                                          _profileData['username'] ?? '',
+                                    ),
+                                  ),
+                                );
+                                // Jika pengaturan berhasil disimpan (result == true), refresh data profil
+                                if (result == true) {
+                                  setState(() {
+                                    _isLoading = true;
+                                  });
+                                  _fetchProfile();
+                                }
+                              },
                             ),
                             const SizedBox(height: 16),
                             _buildMenuCard(
@@ -373,41 +393,48 @@ class _DonorProfilePageState extends State<DonorProfilePage> {
     );
   }
 
-  Widget _buildMenuCard({required IconData icon, required String title}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFF2E7D32), size: 28),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: Colors.black87,
+  Widget _buildMenuCard({
+    required IconData icon,
+    required String title,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap, // Menambahkan fungsi onTap agar bisa diklik
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF2E7D32), size: 28),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
               ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              shape: BoxShape.circle,
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: Colors.black54,
+              ),
             ),
-            child: const Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 14,
-              color: Colors.black54,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

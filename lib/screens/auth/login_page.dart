@@ -10,6 +10,7 @@ import 'register_volunteer_page.dart';
 
 // PENTING: Tambahkan import Dashboard Donatur di sini!
 import '../donor/donor_dashboard.dart';
+import '../receiver/receiver_dashboard.dart';
 
 class LoginPage extends StatefulWidget {
   final String role;
@@ -82,7 +83,7 @@ class _LoginPageState extends State<LoginPage> {
         await prefs.setString('auth_token', token);
         await prefs.setString('user_role', apiRole);
 
-        // Menghilangkan pesan "Login Berhasil" agar transisi lebih mulus (opsional)
+        // Menghilangkan pesan "Login Berhasil" agar transisi lebih mulus
         // ScaffoldMessenger.of(context).showSnackBar(
         //   const SnackBar(content: Text("Login Berhasil!"), backgroundColor: Colors.green),
         // );
@@ -91,14 +92,18 @@ class _LoginPageState extends State<LoginPage> {
         // ARAHKAN KE DASHBOARD BERDASARKAN ROLE
         // ==========================================
         if (apiRole == 'donor') {
-          // Navigasi ke Dashboard Donatur dan cegah tombol "Back"
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => const DonorDashboard()),
             (route) => false,
           );
         } else if (apiRole == 'receiver') {
-          // TODO: Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ReceiverDashboard()));
+          // Buka blokir komentarnya, ganti jadi ini:
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const ReceiverDashboard()),
+            (route) => false,
+          );
         } else if (apiRole == 'volunteer') {
           // TODO: Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const VolunteerDashboard()));
         }

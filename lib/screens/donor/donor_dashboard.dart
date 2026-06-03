@@ -7,6 +7,7 @@ import '../auth/role_selection_page.dart';
 import 'add_donation_page.dart';
 import 'donor_history_page.dart';
 import 'donor_profile_page.dart';
+import 'donation_detail_page.dart';
 
 class DonorDashboard extends StatefulWidget {
   const DonorDashboard({Key? key}) : super(key: key);
@@ -19,7 +20,6 @@ class _DonorDashboardState extends State<DonorDashboard> {
   int _selectedIndex = 0;
   bool _isLoading = true;
 
-  // Variabel untuk menampung data dari database
   Map<String, dynamic> _summary = {'waiting': 0, 'active': 0, 'history': 0};
   List<dynamic> _recentActivities = [];
   String _donorName = "Donatur";
@@ -30,13 +30,11 @@ class _DonorDashboardState extends State<DonorDashboard> {
     _fetchDashboardData();
   }
 
-  // FUNGSI MENGAMBIL DATA DARI BACKEND
   Future<void> _fetchDashboardData() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? token = prefs.getString('auth_token');
 
     try {
-      // 1. Ambil data Dashboard (Summary & Recent Activities)
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/donor/dashboard'),
         headers: {
@@ -45,7 +43,6 @@ class _DonorDashboardState extends State<DonorDashboard> {
         },
       );
 
-      // 2. Ambil data Profil (untuk nama di AppBar)
       final profileResponse = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/donor/profile'),
         headers: {
@@ -83,7 +80,6 @@ class _DonorDashboardState extends State<DonorDashboard> {
     );
   }
 
-  // Bantuan untuk menerjemahkan status ke UI
   Map<String, dynamic> _getStatusUI(String status) {
     switch (status) {
       case 'available':
@@ -116,7 +112,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Banner Donasi
+          // BANNER UTAMA
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -170,7 +166,6 @@ class _DonorDashboardState extends State<DonorDashboard> {
                     ),
                   ),
                   onPressed: () async {
-                    // Tunggu form donasi selesai, lalu refresh data
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -209,7 +204,6 @@ class _DonorDashboardState extends State<DonorDashboard> {
           ),
           const SizedBox(height: 16),
 
-          // Data Asli dari Backend
           Row(
             children: [
               _buildSummaryCard(
@@ -268,7 +262,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
           ),
           const SizedBox(height: 16),
 
-          // List Aktivitas dari Backend
+          // LIST AKTIVITAS TERKINI (DENGAN GAMBAR)
           if (_recentActivities.isEmpty)
             const Text(
               "Belum ada aktivitas donasi.",
@@ -277,12 +271,31 @@ class _DonorDashboardState extends State<DonorDashboard> {
 
           ..._recentActivities.map((item) {
             var statusInfo = _getStatusUI(item['status']);
-            return _buildActivityCard(
-              title: item['name'],
-              status: statusInfo['text'],
-              portion: "${item['portion']} Porsi",
-              statusColor: statusInfo['color'],
-              icon: Icons.fastfood_rounded,
+            // Mengambil ID string bersih dari format BSON MongoDB
+            String itemId = item['_id'] is Map
+                ? item['_id']['\$oid']
+                : item['_id'].toString();
+
+            return GestureDetector(
+              onTap: () async {
+                // Navigasi ke Detail
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DonationDetailPage(foodId: itemId),
+                  ),
+                );
+                // Refresh dashboard jika ada perubahan/penghapusan
+                if (result == true) _fetchDashboardData();
+              },
+              child: _buildActivityCard(
+                title: item['name'],
+                status: statusInfo['text'],
+                portion: "${item['portion']} Porsi",
+                statusColor: statusInfo['color'],
+                icon: Icons.fastfood_rounded,
+                imageUrl: item['photo_url'],
+              ),
             );
           }).toList(),
         ],
@@ -353,14 +366,6 @@ class _DonorDashboardState extends State<DonorDashboard> {
           backgroundColor: Colors.white,
           selectedItemColor: const Color(0xFF2E7D32),
           unselectedItemColor: Colors.grey[400],
-          selectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 12,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 12,
-          ),
           type: BottomNavigationBarType.fixed,
           elevation: 0,
           onTap: (index) => setState(() {
@@ -437,13 +442,24 @@ class _DonorDashboardState extends State<DonorDashboard> {
     );
   }
 
+  // ==========================================
+  // WIDGET KARTU AKTIVITAS YANG SUDAH DIOPTIMASI
+  // ==========================================
   Widget _buildActivityCard({
     required String title,
     required String status,
     required String portion,
     required Color statusColor,
     required IconData icon,
+    String? imageUrl,
   }) {
+    // Membentuk URL lengkap gambar dengan menghapus '/api' dari baseUrl lalu menggabungkannya dengan photo_url dari database
+    String? fullImageUrl;
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      String serverUrl = ApiConfig.baseUrl.replaceAll('/api', '');
+      fullImageUrl = "$serverUrl/$imageUrl";
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
@@ -452,7 +468,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withOpacity(0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -460,13 +476,28 @@ class _DonorDashboardState extends State<DonorDashboard> {
       ),
       child: Row(
         children: [
+          // Tampilan Thumbnail Gambar
           Container(
-            padding: const EdgeInsets.all(14),
+            width: 55,
+            height: 55,
             decoration: BoxDecoration(
-              color: const Color(0xFFF1F6D2),
-              borderRadius: BorderRadius.circular(14),
+              color: const Color(
+                0xFFF1F6D2,
+              ), // Warna dasar jika gambar tidak ada
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: const Color(0xFF56AB2F), size: 26),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: fullImageUrl != null
+                  ? Image.network(
+                      fullImageUrl,
+                      fit: BoxFit.cover,
+                      // Jika gambar gagal diload dari internet, tampilkan icon sebagai cadangan
+                      errorBuilder: (context, error, stackTrace) =>
+                          Icon(icon, color: const Color(0xFF56AB2F), size: 26),
+                    )
+                  : Icon(icon, color: const Color(0xFF56AB2F), size: 26),
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
