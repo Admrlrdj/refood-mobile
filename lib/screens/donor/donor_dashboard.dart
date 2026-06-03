@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/role_selection_page.dart';
+import 'add_donation_page.dart';
 
 class DonorDashboard extends StatefulWidget {
   const DonorDashboard({Key? key}) : super(key: key);
@@ -17,7 +18,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.clear(); // Hapus token dari HP
 
-    // Arahkan kembali ke halaman awal
+    // Arahkan kembali ke halaman awal (Role Selection)
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => RoleSelectionPage()),
@@ -34,7 +35,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        automaticallyImplyLeading: false, // Hilangkan tombol back default
+        automaticallyImplyLeading: false, // Hilangkan tombol back
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -112,7 +113,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // BANNER UTAMA (CALL TO ACTION)
+            // ============ BANNER UTAMA ============
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
@@ -169,6 +170,12 @@ class _DonorDashboardState extends State<DonorDashboard> {
                     ),
                     onPressed: () {
                       // TODO: Navigasi ke Form Tambah Makanan Baru
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AddDonationPage(),
+                        ),
+                      );
                     },
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
@@ -189,9 +196,58 @@ class _DonorDashboardState extends State<DonorDashboard> {
               ),
             ),
 
+            const SizedBox(height: 28),
+
+            // ============ SECTION: RINGKASAN ANDA ============
+            const Text(
+              "Ringkasan Anda",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                // Kartu Riwayat (Orange)
+                _buildSummaryCard(
+                  count: "23",
+                  label: "Riwayat",
+                  gradientColors: [
+                    const Color(0xFFFB923C),
+                    const Color(0xFFEA580C),
+                  ],
+                ),
+                const SizedBox(width: 12),
+
+                // Kartu Donasi Aktif (Green)
+                _buildSummaryCard(
+                  count: "2",
+                  label: "Donasi Aktif",
+                  gradientColors: [
+                    const Color(0xFF4ADE80),
+                    const Color(0xFF16A34A),
+                  ],
+                ),
+                const SizedBox(width: 12),
+
+                // Kartu Menunggu Donasi (Blue)
+                _buildSummaryCard(
+                  count: "5",
+                  label: "Menunggu\nDonasi",
+                  gradientColors: [
+                    const Color(0xFF60A5FA),
+                    const Color(0xFF2563EB),
+                  ],
+                ),
+              ],
+            ),
+
             const SizedBox(height: 32),
 
-            // SEKSI AKTIVITAS / HISTORY TERAKHIR
+            // ============ SECTION: AKTIVITAS TERKINI ============
             const Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -215,7 +271,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
             ),
             const SizedBox(height: 16),
 
-            // Placeholder List Aktivitas
+            // List Aktivitas Dummy
             _buildActivityCard(
               title: "Nasi Kotak Ayam Bakar",
               status: "Sedang dijemput kurir",
@@ -291,7 +347,60 @@ class _DonorDashboardState extends State<DonorDashboard> {
     );
   }
 
-  // Widget Bantuan untuk Membuat Kartu List (ListTile)
+  // WIDGET: Kartu Ringkasan (3 Kolom)
+  Widget _buildSummaryCard({
+    required String count,
+    required String label,
+    required List<Color> gradientColors,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: gradientColors[1].withOpacity(0.4),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              count,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                height: 1.1,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.white.withOpacity(0.95),
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // WIDGET: Kartu Aktivitas Terkini
   Widget _buildActivityCard({
     required String title,
     required String status,
