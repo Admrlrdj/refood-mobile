@@ -36,13 +36,24 @@ class _RequestFoodDetailPageState extends State<RequestFoodDetailPage> {
           'Accept': 'application/json',
         },
       );
-      if (response.statusCode == 200)
+      if (response.statusCode == 200) {
         setState(() {
           _foodData = jsonDecode(response.body)['data'];
           _isLoading = false;
         });
+      } else {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Gagal memuat data request."),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pop(context);
+      }
     } catch (e) {
       setState(() => _isLoading = false);
+      Navigator.pop(context);
     }
   }
 
@@ -72,6 +83,13 @@ class _RequestFoodDetailPageState extends State<RequestFoodDetailPage> {
     }
   }
 
+  String _getSafeDate(dynamic dateData) {
+    if (dateData == null) return DateTime.now().toString();
+    if (dateData is Map && dateData.containsKey('\$date'))
+      return dateData['\$date'];
+    return dateData.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading)
@@ -84,9 +102,18 @@ class _RequestFoodDetailPageState extends State<RequestFoodDetailPage> {
       return const Scaffold(body: Center(child: Text("Data tidak ditemukan")));
 
     String? fullImageUrl;
-    if (_foodData!['photo_url'] != null)
+    if (_foodData!['photo_url'] != null && _foodData!['photo_url'] != "") {
       fullImageUrl =
           "${ApiConfig.baseUrl.replaceAll('/api', '')}/${_foodData!['photo_url']}";
+    }
+
+    DateTime parsedDate = DateTime.parse(
+      _getSafeDate(_foodData!['collection_date']),
+    ).toLocal();
+    String formattedDate = DateFormat(
+      'EEEE, dd MMM yyyy - HH:mm',
+      'id_ID',
+    ).format(parsedDate);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -139,7 +166,7 @@ class _RequestFoodDetailPageState extends State<RequestFoodDetailPage> {
             ),
             const SizedBox(height: 24),
             Text(
-              _foodData!['name'],
+              _foodData!['name'] ?? '-',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 8),
@@ -150,7 +177,7 @@ class _RequestFoodDetailPageState extends State<RequestFoodDetailPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                _foodData!['category'],
+                _foodData!['category'] ?? '-',
                 style: const TextStyle(
                   color: Color(0xFFB45309),
                   fontWeight: FontWeight.bold,
@@ -158,6 +185,7 @@ class _RequestFoodDetailPageState extends State<RequestFoodDetailPage> {
               ),
             ),
             const SizedBox(height: 24),
+
             _buildDetailRow(
               "Kebutuhan Porsi",
               "${_foodData!['portion']} Porsi",
@@ -165,10 +193,7 @@ class _RequestFoodDetailPageState extends State<RequestFoodDetailPage> {
             ),
             _buildDetailRow(
               "Tanggal Dibutuhkan",
-              DateFormat(
-                'EEEE, dd MMM yyyy - HH:mm',
-                'id_ID',
-              ).format(DateTime.parse(_foodData!['collection_date']).toLocal()),
+              formattedDate,
               Icons.calendar_month,
             ),
             _buildDetailRow(
@@ -176,6 +201,7 @@ class _RequestFoodDetailPageState extends State<RequestFoodDetailPage> {
               _foodData!['note'] ?? 'Tidak ada catatan',
               Icons.notes,
             ),
+
             const SizedBox(height: 40),
 
             if (_foodData!['status'] == 'waiting_donor')
@@ -237,7 +263,6 @@ class _RequestFoodDetailPageState extends State<RequestFoodDetailPage> {
                         ),
                       ),
                       onPressed: () async {
-                        // Navigasi ke EditRequestPage
                         final result = await Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -245,7 +270,10 @@ class _RequestFoodDetailPageState extends State<RequestFoodDetailPage> {
                                 EditRequestPage(foodData: _foodData!),
                           ),
                         );
-                        if (result == true) _fetchDetail();
+                        if (result == true) {
+                          setState(() => _isLoading = true);
+                          _fetchDetail();
+                        }
                       },
                       child: const Text(
                         "Edit",

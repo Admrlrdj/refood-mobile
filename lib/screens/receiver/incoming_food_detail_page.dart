@@ -38,13 +38,25 @@ class _IncomingFoodDetailPageState extends State<IncomingFoodDetailPage> {
           'Accept': 'application/json',
         },
       );
-      if (response.statusCode == 200)
+
+      if (response.statusCode == 200) {
         setState(() {
           _foodData = jsonDecode(response.body)['data'];
           _isLoading = false;
         });
+      } else {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Data tidak ditemukan / ditarik oleh donatur."),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pop(context);
+      }
     } catch (e) {
       setState(() => _isLoading = false);
+      Navigator.pop(context);
     }
   }
 
@@ -65,7 +77,7 @@ class _IncomingFoodDetailPageState extends State<IncomingFoodDetailPage> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context, true); // Refresh dashboard
+      Navigator.pop(context, true);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -75,6 +87,13 @@ class _IncomingFoodDetailPageState extends State<IncomingFoodDetailPage> {
       );
       setState(() => _isAccepting = false);
     }
+  }
+
+  String _getSafeDate(dynamic dateData) {
+    if (dateData == null) return DateTime.now().toString();
+    if (dateData is Map && dateData.containsKey('\$date'))
+      return dateData['\$date'];
+    return dateData.toString();
   }
 
   @override
@@ -89,9 +108,18 @@ class _IncomingFoodDetailPageState extends State<IncomingFoodDetailPage> {
       return const Scaffold(body: Center(child: Text("Data tidak ditemukan")));
 
     String? fullImageUrl;
-    if (_foodData!['photo_url'] != null)
+    if (_foodData!['photo_url'] != null && _foodData!['photo_url'] != "") {
       fullImageUrl =
           "${ApiConfig.baseUrl.replaceAll('/api', '')}/${_foodData!['photo_url']}";
+    }
+
+    DateTime parsedDate = DateTime.parse(
+      _getSafeDate(_foodData!['collection_date']),
+    ).toLocal();
+    String formattedDate = DateFormat(
+      'EEEE, dd MMM yyyy - HH:mm',
+      'id_ID',
+    ).format(parsedDate);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -140,7 +168,7 @@ class _IncomingFoodDetailPageState extends State<IncomingFoodDetailPage> {
             ),
             const SizedBox(height: 24),
             Text(
-              _foodData!['name'],
+              _foodData!['name'] ?? '-',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 8),
@@ -151,7 +179,7 @@ class _IncomingFoodDetailPageState extends State<IncomingFoodDetailPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                _foodData!['category'],
+                _foodData!['category'] ?? '-',
                 style: const TextStyle(
                   color: Color(0xFF0F766E),
                   fontWeight: FontWeight.bold,
@@ -166,10 +194,7 @@ class _IncomingFoodDetailPageState extends State<IncomingFoodDetailPage> {
             ),
             _buildDetailRow(
               "Tenggat Waktu",
-              DateFormat(
-                'EEEE, dd MMM yyyy - HH:mm',
-                'id_ID',
-              ).format(DateTime.parse(_foodData!['collection_date']).toLocal()),
+              formattedDate,
               Icons.calendar_month,
             ),
             _buildDetailRow(

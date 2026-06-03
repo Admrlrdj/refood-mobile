@@ -43,9 +43,26 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
           _foodData = jsonDecode(response.body)['data'];
           _isLoading = false;
         });
+      } else {
+        // MENGATASI INFINITE LOADING JIKA SERVER ERROR / 404
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Gagal memuat detail data."),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pop(context);
       }
     } catch (e) {
       setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Kesalahan jaringan: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      Navigator.pop(context);
     }
   }
 
@@ -65,7 +82,7 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context, true); // Refresh dashboard
+      Navigator.pop(context, true);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -74,6 +91,14 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
         ),
       );
     }
+  }
+
+  // Helper untuk membaca format Date BSON MongoDB dengan aman
+  String _getSafeDate(dynamic dateData) {
+    if (dateData == null) return DateTime.now().toString();
+    if (dateData is Map && dateData.containsKey('\$date'))
+      return dateData['\$date'];
+    return dateData.toString();
   }
 
   @override
@@ -88,13 +113,14 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
       return const Scaffold(body: Center(child: Text("Data tidak ditemukan")));
 
     String? fullImageUrl;
-    if (_foodData!['photo_url'] != null) {
+    if (_foodData!['photo_url'] != null && _foodData!['photo_url'] != "") {
       fullImageUrl =
           "${ApiConfig.baseUrl.replaceAll('/api', '')}/${_foodData!['photo_url']}";
     }
 
+    // Parsing Tanggal Secara Aman
     DateTime parsedDate = DateTime.parse(
-      _foodData!['collection_date'],
+      _getSafeDate(_foodData!['collection_date']),
     ).toLocal();
     String formattedDate = DateFormat(
       'EEEE, dd MMM yyyy - HH:mm',
@@ -124,7 +150,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // GAMBAR
             Container(
               width: double.infinity,
               height: 200,
@@ -148,10 +173,8 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
               ),
             ),
             const SizedBox(height: 24),
-
-            // INFO DETAIL
             Text(
-              _foodData!['name'],
+              _foodData!['name'] ?? 'Tanpa Nama',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 8),
@@ -162,7 +185,7 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                _foodData!['category'],
+                _foodData!['category'] ?? 'Umum',
                 style: const TextStyle(
                   color: Color(0xFF2E7D32),
                   fontWeight: FontWeight.bold,
@@ -188,13 +211,12 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
             ),
             _buildDetailRow(
               "Status",
-              _foodData!['status'].toUpperCase(),
+              (_foodData!['status'] ?? 'Unknown').toUpperCase(),
               Icons.info_outline,
             ),
 
             const SizedBox(height: 40),
 
-            // TOMBOL EDIT & DELETE (Hanya muncul jika status available)
             if (_foodData!['status'] == 'available')
               Row(
                 children: [
@@ -261,8 +283,10 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
                                 EditDonationPage(foodData: _foodData!),
                           ),
                         );
-                        if (result == true)
-                          _fetchDetail(); // Refresh halaman detail
+                        if (result == true) {
+                          setState(() => _isLoading = true);
+                          _fetchDetail();
+                        }
                       },
                       child: const Text(
                         "Edit",

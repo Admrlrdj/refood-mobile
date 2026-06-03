@@ -298,11 +298,11 @@ class _DonorProfilePageState extends State<DonorProfilePage> {
                                 }
                               },
                             ),
-                            const SizedBox(height: 16),
-                            _buildMenuCard(
-                              icon: Icons.privacy_tip_rounded,
-                              title: "Privasi Akun",
-                            ),
+                            // const SizedBox(height: 16),
+                            // _buildMenuCard(
+                            //   icon: Icons.privacy_tip_rounded,
+                            //   title: "Privasi Akun",
+                            // ),
                             const SizedBox(height: 40),
 
                             // TOMBOL SIGN OUT

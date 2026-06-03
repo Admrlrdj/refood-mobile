@@ -5,10 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../../core/api_config.dart';
 
-// Catatan: Duplikasi 'edit_profile_page.dart' dan 'settings_page.dart' milik Donatur,
-// simpan di folder 'receiver', lalu ubah URL-nya ke '/receiver/profile' & '/receiver/settings'
-// import 'receiver_edit_profile_page.dart';
-// import 'receiver_settings_page.dart';
+// Import kedua halaman yang baru kita buat
+import 'receiver_edit_profile_page.dart';
+import 'receiver_settings_page.dart';
 
 class ReceiverProfilePage extends StatefulWidget {
   final VoidCallback onBackPressed;
@@ -164,9 +163,22 @@ class _ReceiverProfilePageState extends State<ReceiverProfilePage> {
                     ],
                   ),
                   const SizedBox(height: 12),
+
+                  // ---> NAVIGASI EDIT PROFIL <---
                   GestureDetector(
-                    onTap: () {
-                      // TODO: Navigasi ke Edit Profil Penerima
+                    onTap: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ReceiverEditProfilePage(
+                            currentData: _profileData,
+                          ),
+                        ),
+                      );
+                      if (result == true) {
+                        setState(() => _isLoading = true);
+                        _fetchProfile();
+                      }
                     },
                     child: const Text(
                       "Edit Profil",
@@ -237,7 +249,7 @@ class _ReceiverProfilePageState extends State<ReceiverProfilePage> {
                                   const SizedBox(height: 12),
                                   _buildProfileRow(
                                     "Kapasitas",
-                                    "${_profileData['capacity_people']} Orang",
+                                    "${_profileData['capacity_people'] ?? 0} Orang",
                                   ),
                                   const SizedBox(height: 12),
                                   _buildProfileRow(
@@ -256,13 +268,28 @@ class _ReceiverProfilePageState extends State<ReceiverProfilePage> {
                               ),
                             ),
                             const SizedBox(height: 16),
+
+                            // ---> NAVIGASI PENGATURAN AKUN <---
                             _buildMenuCard(
                               icon: Icons.settings_rounded,
                               title: "Pengaturan Akun",
-                              onTap: () {
-                                // TODO: Navigasi ke Settings Penerima
+                              onTap: () async {
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ReceiverSettingsPage(
+                                      currentUsername:
+                                          _profileData['username'] ?? '',
+                                    ),
+                                  ),
+                                );
+                                if (result == true) {
+                                  setState(() => _isLoading = true);
+                                  _fetchProfile();
+                                }
                               },
                             ),
+
                             const SizedBox(height: 40),
 
                             Container(

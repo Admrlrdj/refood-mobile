@@ -5,19 +5,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api_config.dart';
 import '../widgets/map_picker_page.dart';
 
-class EditProfilePage extends StatefulWidget {
-  final Map<String, dynamic> currentData; // Menerima data profil saat ini
+class ReceiverEditProfilePage extends StatefulWidget {
+  final Map<String, dynamic> currentData;
 
-  const EditProfilePage({Key? key, required this.currentData})
+  const ReceiverEditProfilePage({Key? key, required this.currentData})
     : super(key: key);
 
   @override
-  _EditProfilePageState createState() => _EditProfilePageState();
+  _ReceiverEditProfilePageState createState() =>
+      _ReceiverEditProfilePageState();
 }
 
-class _EditProfilePageState extends State<EditProfilePage> {
+class _ReceiverEditProfilePageState extends State<ReceiverEditProfilePage> {
   late TextEditingController _nameController;
-  late TextEditingController _restaurantController;
+  late TextEditingController _picController;
+  late TextEditingController _capacityController;
   late TextEditingController _phoneController;
   late TextEditingController _addressController;
 
@@ -26,14 +28,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
   @override
   void initState() {
     super.initState();
-    // Mengisi form dengan data dari database
-    _nameController = TextEditingController(text: widget.currentData['name']);
-    _restaurantController = TextEditingController(
-      text: widget.currentData['restaurant_name'] ?? '',
+    _nameController = TextEditingController(
+      text: widget.currentData['name'] ?? '',
     );
-    _phoneController = TextEditingController(text: widget.currentData['phone']);
+    _picController = TextEditingController(
+      text: widget.currentData['pic_name'] ?? '',
+    );
+    _capacityController = TextEditingController(
+      text: widget.currentData['capacity_people']?.toString() ?? '',
+    );
+    _phoneController = TextEditingController(
+      text: widget.currentData['phone'] ?? '',
+    );
     _addressController = TextEditingController(
-      text: widget.currentData['address'],
+      text: widget.currentData['address'] ?? '',
     );
   }
 
@@ -41,16 +49,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
   // FUNGSI: MEMANGGIL MAP PICKER ASLI
   // ==========================================
   Future<void> _openMapPicker() async {
-    // Navigasi ke halaman MapPickerPage aslimu
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const MapPickerPage()),
     );
 
-    // Jika user mengklik "Pilih Lokasi" di peta dan datanya tidak kosong
     if (result != null) {
       setState(() {
-        // Mengantisipasi jika map picker-mu me-return tipe data String atau Map
         if (result is Map) {
           _addressController.text = result['address']?.toString() ?? '';
         } else {
@@ -60,9 +65,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
-  // ==========================================
-  // FUNGSI: UPDATE PROFIL KE LARAVEL
-  // ==========================================
   Future<void> _updateProfile() async {
     setState(() {
       _isLoading = true;
@@ -74,7 +76,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
       final response = await http
           .put(
-            Uri.parse('${ApiConfig.baseUrl}/donor/profile'),
+            Uri.parse('${ApiConfig.baseUrl}/receiver/profile'),
             headers: {
               'Authorization': 'Bearer $token',
               'Accept': 'application/json',
@@ -82,7 +84,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
             },
             body: jsonEncode({
               'name': _nameController.text,
-              'restaurant_name': _restaurantController.text,
+              'pic_name': _picController.text,
+              'capacity_people': int.tryParse(_capacityController.text) ?? 0,
               'phone': _phoneController.text,
               'address': _addressController.text,
             }),
@@ -96,10 +99,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(
-          context,
-          true,
-        ); // Mengirim parameter 'true' agar halaman sebelumnya me-refresh data
+        Navigator.pop(context, true);
       } else {
         final responseData = jsonDecode(response.body);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -150,13 +150,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildLabel("Nama PIC"),
-            _buildTextField("Cth: Budi Santoso", controller: _nameController),
-
-            _buildLabel("Nama Restoran/Toko"),
+            _buildLabel("Nama Yayasan / Instansi"),
             _buildTextField(
-              "Cth: Warung Nasi Budi",
-              controller: _restaurantController,
+              "Cth: Panti Asuhan Kasih Bunda",
+              controller: _nameController,
+            ),
+
+            _buildLabel("Nama PIC (Penanggung Jawab)"),
+            _buildTextField("Cth: Budi Santoso", controller: _picController),
+
+            _buildLabel("Kapasitas Orang"),
+            _buildTextField(
+              "Cth: 50",
+              controller: _capacityController,
+              keyboardType: TextInputType.number,
             ),
 
             _buildLabel("No. WhatsApp"),
@@ -167,7 +174,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
             ),
 
             _buildLabel("Alamat Lengkap"),
-            // Tombol Maps
+
+            // TOMBOL PILIH DARI MAPS
             GestureDetector(
               onTap: _openMapPicker,
               child: Container(
@@ -177,20 +185,22 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
+                  color: const Color(
+                    0xFFE0F2FE,
+                  ), // Background Biru Pucat (Teal tone)
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: const Color(0xFF86D538).withOpacity(0.5),
+                    color: const Color(0xFF0F766E).withOpacity(0.5),
                   ),
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.map_rounded, color: Color(0xFF2E7D32)),
+                    Icon(Icons.map_rounded, color: Color(0xFF0F766E)),
                     SizedBox(width: 12),
                     Text(
                       "Pilih dari Peta (Maps)",
                       style: TextStyle(
-                        color: Color(0xFF2E7D32),
+                        color: Color(0xFF0F766E),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -198,13 +208,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     Icon(
                       Icons.arrow_forward_ios,
                       size: 14,
-                      color: Color(0xFF2E7D32),
+                      color: Color(0xFF0F766E),
                     ),
                   ],
                 ),
               ),
             ),
-            // Textfield Alamat (Bisa diketik manual, atau otomatis terisi dari Maps)
+
+            // TEXTFIELD ALAMAT
             TextFormField(
               controller: _addressController,
               maxLines: 3,
@@ -221,14 +232,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
             ),
 
             const SizedBox(height: 40),
-
-            // TOMBOL SIMPAN
             SizedBox(
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2E7D32),
+                  backgroundColor: const Color(0xFF0F766E),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
                   ),
