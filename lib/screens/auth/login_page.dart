@@ -7,11 +7,12 @@ import '../../core/api_config.dart';
 import 'register_page.dart';
 import 'register_receiver_page.dart';
 import 'register_volunteer_page.dart';
-// Nantinya import dashboard sesuai role di sini:
-// import '../donor/donor_dashboard.dart';
+
+// PENTING: Tambahkan import Dashboard Donatur di sini!
+import '../donor/donor_dashboard.dart';
 
 class LoginPage extends StatefulWidget {
-  final String role; // 'Donatur', 'Penerima', atau 'Relawan'
+  final String role;
 
   const LoginPage({Key? key, required this.role}) : super(key: key);
 
@@ -23,8 +24,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isPasswordVisible = false;
   bool _isLoading = false;
 
-  // Controllers untuk mengambil inputan text
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   void _navigateToRegister() {
@@ -46,52 +46,63 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // FUNGSI LOGIN KE LARAVEL
   Future<void> _handleLogin() async {
     setState(() {
       _isLoading = true;
     });
 
-    // Ubah nama role di UI menjadi format yang dimengerti API (donor, receiver, volunteer)
     String apiRole = 'donor';
     if (widget.role == 'Penerima') apiRole = 'receiver';
     if (widget.role == 'Relawan') apiRole = 'volunteer';
 
     try {
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/login'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'email': _emailController.text,
-          'password': _passwordController.text,
-          'role': apiRole,
-        }),
-      );
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/login'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({
+              'username': _usernameController.text, // <-- Ganti email jadi username
+              'password': _passwordController.text,
+              'role': apiRole,
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 10),
+          ); // <--- TAMBAHKAN TIMEOUT DI SINI
 
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        // Jika Sukses, Simpan Token
         String token = responseData['access_token'];
 
         SharedPreferences prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', token);
         await prefs.setString('user_role', apiRole);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Login Berhasil!"),
-            backgroundColor: Colors.green,
-          ),
-        );
+        // Menghilangkan pesan "Login Berhasil" agar transisi lebih mulus (opsional)
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   const SnackBar(content: Text("Login Berhasil!"), backgroundColor: Colors.green),
+        // );
 
-        // TODO: Arahkan ke Dashboard masing-masing
-        // Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => DonorDashboard()));
+        // ==========================================
+        // ARAHKAN KE DASHBOARD BERDASARKAN ROLE
+        // ==========================================
+        if (apiRole == 'donor') {
+          // Navigasi ke Dashboard Donatur dan cegah tombol "Back"
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const DonorDashboard()),
+            (route) => false,
+          );
+        } else if (apiRole == 'receiver') {
+          // TODO: Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ReceiverDashboard()));
+        } else if (apiRole == 'volunteer') {
+          // TODO: Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const VolunteerDashboard()));
+        }
       } else {
-        // Menampilkan pesan error dari Backend (misal: Akun belum diverifikasi, password salah)
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(responseData['message'] ?? "Login Gagal"),
@@ -188,7 +199,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 40),
 
                   const Text(
-                    "Email",
+                    "Username",
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -196,11 +207,13 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   TextFormField(
-                    controller: _emailController, // Pasang Controller
-                    keyboardType: TextInputType.emailAddress,
+                    controller:
+                        _usernameController, // <-- Pasang username controller
+                    keyboardType: TextInputType.text, // <-- Ganti keyboard
                     decoration: InputDecoration(
-                      hintText: "Masukkan email",
+                      hintText: "Masukkan username",
                       hintStyle: TextStyle(
                         color: Colors.grey[400],
                         fontSize: 14,

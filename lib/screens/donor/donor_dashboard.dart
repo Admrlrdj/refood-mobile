@@ -1,95 +1,358 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../auth/role_selection_page.dart';
 
-class DonorDashboard extends StatelessWidget {
-  const DonorDashboard({super.key});
+class DonorDashboard extends StatefulWidget {
+  const DonorDashboard({Key? key}) : super(key: key);
+
+  @override
+  _DonorDashboardState createState() => _DonorDashboardState();
+}
+
+class _DonorDashboardState extends State<DonorDashboard> {
+  int _selectedIndex = 0;
+
+  // Fungsi Logout
+  Future<void> _logout() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // Hapus token dari HP
+
+    // Arahkan kembali ke halaman awal
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => RoleSelectionPage()),
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF4F6F8),
+
+      // ============ APP BAR ============
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        automaticallyImplyLeading: false, // Hilangkan tombol back default
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Halo, Warung Barokah 👋',
+              "Halo, Donatur 👋",
               style: TextStyle(
-                color: Colors.black,
+                color: Colors.black87,
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w800,
               ),
             ),
             Text(
-              'Siap membagikan kebaikan hari ini?',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+              "Mari berbagi makanan hari ini",
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.receipt_long, color: Colors.black),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.notifications_none, color: Colors.black),
-            onPressed: () {},
-          ),
-          const CircleAvatar(
-            backgroundImage: NetworkImage(
-              'https://ui-avatars.com/api/?name=W+B',
-            ),
-            radius: 16,
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Kartu Metrik (UI Gamifikasi Figma)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF10B981), Color(0xFF059669)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Total Donasi',
-                      style: TextStyle(color: Colors.white70),
+            icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+            tooltip: "Logout",
+            onPressed: () {
+              // Tampilkan dialog konfirmasi logout
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text(
+                    "Keluar",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  content: const Text(
+                    "Apakah Anda yakin ingin keluar dari akun ini?",
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text(
+                        "Batal",
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ),
-                    Text(
-                      '120 Porsi',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _logout();
+                      },
+                      child: const Text(
+                        "Ya, Keluar",
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Emisi Dicegah',
-                      style: TextStyle(color: Colors.white70),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+
+      // ============ BODY DASHBOARD ============
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // BANNER UTAMA (CALL TO ACTION)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF86D538), Color(0xFF2E7D32)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF4CAF50).withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Punya makanan berlebih?",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Jangan dibuang! Salurkan kepada yayasan dan panti asuhan melalui aplikasi RE-FOOD.",
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Tombol Donasi Sekarang
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF2E7D32),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                    ),
+                    onPressed: () {
+                      // TODO: Navigasi ke Form Tambah Makanan Baru
+                    },
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.add_circle_outline_rounded, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          "Donasi Sekarang",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // SEKSI AKTIVITAS / HISTORY TERAKHIR
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Aktivitas Terkini",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black87,
+                  ),
+                ),
+                Text(
+                  "Lihat Semua",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF56AB2F),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Placeholder List Aktivitas
+            _buildActivityCard(
+              title: "Nasi Kotak Ayam Bakar",
+              status: "Sedang dijemput kurir",
+              portion: "15 Porsi",
+              statusColor: Colors.blue,
+              icon: Icons.delivery_dining_rounded,
+            ),
+            _buildActivityCard(
+              title: "Kue Basah & Roti Sisa",
+              status: "Selesai disalurkan",
+              portion: "30 Porsi",
+              statusColor: Colors.green,
+              icon: Icons.check_circle_rounded,
+            ),
+            _buildActivityCard(
+              title: "Sayuran & Buah Segar",
+              status: "Menunggu kurir",
+              portion: "10 Kg",
+              statusColor: Colors.orange,
+              icon: Icons.pending_actions_rounded,
+            ),
+          ],
+        ),
+      ),
+
+      // ============ BOTTOM NAVIGATION BAR ============
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF2E7D32),
+          unselectedItemColor: Colors.grey[400],
+          selectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+          ),
+          type: BottomNavigationBarType.fixed,
+          elevation: 0,
+          onTap: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_rounded),
+              label: "Beranda",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long_rounded),
+              label: "Riwayat",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_rounded),
+              label: "Profil",
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Widget Bantuan untuk Membuat Kartu List (ListTile)
+  Widget _buildActivityCard({
+    required String title,
+    required String status,
+    required String portion,
+    required Color statusColor,
+    required IconData icon,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F6D2),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              Icons.fastfood_rounded,
+              color: Color(0xFF56AB2F),
+              size: 26,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: Colors.black87,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(icon, size: 14, color: statusColor),
+                    const SizedBox(width: 4),
                     Text(
-                      '15 Kg',
+                      status,
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -97,51 +360,22 @@ class DonorDashboard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          const Text(
-            'Donasi Aktif',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          // List Makanan
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: ListTile(
-              leading: Container(
-                width: 50,
-                height: 50,
-                color: Colors.orange.shade100,
-                child: const Icon(Icons.fastfood, color: Colors.orange),
-              ),
-              title: const Text(
-                'Ayam Bakar Sisa Katering',
-                style: FontWeight.bold,
-              ),
-              subtitle: const Text('20 Porsi • Exp: 15:00 WIB'),
-              trailing: const Chip(
-                label: Text(
-                  'Menunggu Kurir',
-                  style: TextStyle(fontSize: 10, color: Colors.orange),
-                ),
-                backgroundColor: Colors.white,
+            child: Text(
+              portion,
+              style: const TextStyle(
+                color: Colors.black87,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
         ],
-      ),
-      // Floating Action Button "Tambah Donasi"
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // Navigasi ke Form Tambah Donasi
-        },
-        backgroundColor: const Color(0xFF10B981),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          'Buat Donasi',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
       ),
     );
   }

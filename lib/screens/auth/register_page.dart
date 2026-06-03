@@ -17,6 +17,7 @@ class _RegisterPageState extends State<RegisterPage> {
       TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -49,6 +50,7 @@ class _RegisterPageState extends State<RegisterPage> {
         },
         body: jsonEncode({
           'name': _nameController.text,
+          'username': _usernameController.text, // <-- Tambahkan ini
           'restaurant_name': _restaurantNameController.text,
           'email': _emailController.text,
           'phone': _phoneController.text,
@@ -204,6 +206,13 @@ class _RegisterPageState extends State<RegisterPage> {
                     "Masukkan nama lengkap Anda",
                     controller: _nameController,
                   ),
+
+                  _buildLabel("Username (Untuk Login)"),
+                  _buildTextField(
+                    "Cth: donatur_sejati",
+                    controller: _usernameController,
+                  ),
+                  
 
                   _buildLabel("Email"),
                   _buildTextField(
