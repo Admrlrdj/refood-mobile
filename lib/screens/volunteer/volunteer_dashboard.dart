@@ -72,7 +72,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
     await prefs.clear();
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => const RoleSelectionPage()),
+      MaterialPageRoute(builder: (context) => RoleSelectionPage()),
       (route) => false,
     );
   }
