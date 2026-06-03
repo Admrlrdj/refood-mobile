@@ -1,56 +1,119 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../../core/api_config.dart';
+import '../auth/role_selection_page.dart';
+import 'search_food_page.dart';
+import 'request_food_page.dart';
+import 'incoming_food_detail_page.dart';
+import 'request_food_detail_page.dart';
+import 'receiver_history_page.dart';
+import 'receiver_profile_page.dart';
 
 class ReceiverDashboard extends StatefulWidget {
   const ReceiverDashboard({Key? key}) : super(key: key);
 
   @override
-  State<ReceiverDashboard> createState() => _ReceiverDashboardState();
+  _ReceiverDashboardState createState() => _ReceiverDashboardState();
 }
 
 class _ReceiverDashboardState extends State<ReceiverDashboard> {
   int _selectedIndex = 0;
-  bool _isLoading = false; // Bisa diubah ke true jika nanti sudah disambung API
+  bool _isLoading = true;
 
-  final String _receiverName = "Panti Asuhan";
-
-  // Data Dummy Summary
-  final Map<String, dynamic> _summary = {
-    'waiting': 0,
-    'active': 2,
-    'history': 15,
+  Map<String, dynamic> _summary = {
+    'received': 0,
+    'on_delivery': 0,
+    'requests': 0,
   };
 
-  // Daftar data *dummy* untuk rekomendasi makanan
-  final List<Map<String, dynamic>> _foodRecommendations = [
-    {
-      'name': 'Nasi Kotak Ayam Bakar',
-      'location': 'Warung Nasi Padang - 1.2 km',
-      'image':
-          'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
-      'time': 'Tersedia hingga 20:00',
-    },
-    {
-      'name': 'Roti Manis & Donat',
-      'location': 'Toko Roti Makmur - 2.5 km',
-      'image':
-          'https://images.unsplash.com/photo-1509440159596-0249088772ff?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
-      'time': 'Tersedia hingga 21:00',
-    },
-    {
-      'name': 'Sayur & Lauk Pauk',
-      'location': 'Warteg Sederhana - 0.8 km',
-      'image':
-          'https://images.unsplash.com/photo-1543826173-70651703c5a4?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
-      'time': 'Tersedia hingga 19:30',
-    },
-  ];
+  List<dynamic> _incomingFoods = []; // Dari Donatur
+  List<dynamic> _recentRequests = []; // Dari Receiver
+  String _receiverName = "Yayasan";
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData();
+  }
+
+  Future<void> _fetchDashboardData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? token = prefs.getString('auth_token');
+
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/receiver/dashboard'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      final profileResponse = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/receiver/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200 && profileResponse.statusCode == 200) {
+        final data = jsonDecode(response.body)['data'];
+        final profileData = jsonDecode(profileResponse.body)['data'];
+
+        setState(() {
+          _summary = data['summary'];
+          _incomingFoods = data['incoming_foods'];
+          _recentRequests = data['recent_requests'];
+          _receiverName = profileData['name'] ?? "Yayasan";
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      print("Error fetching dashboard: $e");
+    }
+  }
+
+  Future<void> _logout() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => RoleSelectionPage()),
+      (route) => false,
+    );
+  }
+
+  // Translasi status untuk UI Penerima
+  Map<String, dynamic> _getStatusUI(String status) {
+    switch (status) {
+      case 'available':
+        return {"text": "Tersedia", "color": Colors.blue};
+      case 'waiting_donor':
+        return {"text": "Menunggu Donatur", "color": Colors.orange};
+      case 'accepted':
+      case 'on_delivery':
+        return {"text": "Sedang Diantar", "color": Colors.amber};
+      case 'completed':
+        return {"text": "Selesai", "color": Colors.green};
+      case 'cancelled':
+        return {"text": "Dibatalkan", "color": Colors.red};
+      default:
+        return {"text": status, "color": Colors.grey};
+    }
+  }
 
   Widget _buildHomeContent() {
     if (_isLoading) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.only(top: 100.0),
-          child: CircularProgressIndicator(color: Color(0xFF2E7D32)),
+          child: CircularProgressIndicator(color: Color(0xFF0F766E)),
         ),
       );
     }
@@ -61,20 +124,20 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Banner Utama (Sama dengan Donatur)
+          // ================= BANNER UTAMA =================
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF86D538), Color(0xFF2E7D32)],
+                colors: [Color(0xFF2EA275), Color(0xFF0F766E)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF4CAF50).withOpacity(0.3),
+                  color: const Color(0xFF0F766E).withOpacity(0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
                 ),
@@ -93,7 +156,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "Temukan donasi makanan berlebih di sekitarmu dan jemput kebaikan hari ini.",
+                  "Cari donasi yang tersedia di sekitar Anda atau ajukan permintaan kebutuhan makanan.",
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: 13,
@@ -101,36 +164,84 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF2E7D32),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
-                  ),
-                  onPressed: () {
-                    // TODO: Aksi untuk eksplor/peta makanan
-                  },
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.search_rounded, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        "Cari Makanan",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF0F766E),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SearchFoodPage(),
+                            ),
+                          );
+                        },
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.search_rounded, size: 18),
+                            SizedBox(width: 6),
+                            Text(
+                              "Cari",
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(
+                            color: Colors.white,
+                            width: 1.5,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const RequestFoodPage(),
+                            ),
+                          );
+                          _fetchDashboardData(); // Refresh setelah request
+                        },
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.campaign_rounded, size: 18),
+                            SizedBox(width: 6),
+                            Text(
+                              "Request",
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -138,7 +249,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
 
           const SizedBox(height: 28),
           const Text(
-            "Ringkasan Anda",
+            "Ringkasan Penerimaan",
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
@@ -147,21 +258,11 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
           ),
           const SizedBox(height: 16),
 
-          // 3 Kartu Ringkasan (Sama dengan Donatur)
           Row(
             children: [
               _buildSummaryCard(
-                count: _summary['history'].toString(),
-                label: "Riwayat",
-                gradientColors: [
-                  const Color(0xFFFB923C),
-                  const Color(0xFFEA580C),
-                ],
-              ),
-              const SizedBox(width: 12),
-              _buildSummaryCard(
-                count: _summary['active'].toString(),
-                label: "Diproses",
+                count: _summary['received'].toString(),
+                label: "Diterima",
                 gradientColors: [
                   const Color(0xFF4ADE80),
                   const Color(0xFF16A34A),
@@ -169,11 +270,20 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
               ),
               const SizedBox(width: 12),
               _buildSummaryCard(
-                count: _summary['waiting'].toString(),
-                label: "Menunggu",
+                count: _summary['on_delivery'].toString(),
+                label: "Diperjalanan",
                 gradientColors: [
                   const Color(0xFF60A5FA),
                   const Color(0xFF2563EB),
+                ],
+              ),
+              const SizedBox(width: 12),
+              _buildSummaryCard(
+                count: _summary['requests'].toString(),
+                label: "Request",
+                gradientColors: [
+                  const Color(0xFFFB923C),
+                  const Color(0xFFEA580C),
                 ],
               ),
             ],
@@ -181,37 +291,128 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
 
           const SizedBox(height: 32),
 
-          // Section Rekomendasi (Mirip "Aktivitas Terkini" di Donatur)
-          Row(
+          // ================= MAKANAN MASUK TERKINI (DARI DONATUR) =================
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                "Rekomendasi Makanan",
+              Text(
+                "Makanan Masuk Terkini",
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                   color: Colors.black87,
                 ),
               ),
-              GestureDetector(
-                onTap: () {
-                  // TODO: Aksi lihat semua
-                },
-                child: const Text(
-                  "Lihat Semua",
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF56AB2F),
-                  ),
+              Text(
+                "Lihat Semua",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2EA275),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
 
-          // Memakai list horizontal gaya Receiver tapi diadaptasi ke UI Donatur
-          _buildHorizontalFoodList(),
+          if (_incomingFoods.isEmpty)
+            const Text(
+              "Belum ada donasi makanan terbaru di sekitar Anda.",
+              style: TextStyle(color: Colors.grey),
+            ),
+
+          ..._incomingFoods.map((item) {
+            var statusInfo = _getStatusUI(item['status']);
+            // Mengambil ID
+            String itemId = item['_id'] is Map
+                ? item['_id']['\$oid']
+                : item['_id'].toString();
+
+            return GestureDetector(
+              onTap: () async {
+                // Menghubungkan ke detail makanan masuk (Donasi)
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        IncomingFoodDetailPage(foodId: itemId),
+                  ),
+                );
+                if (result == true) _fetchDashboardData();
+              },
+              child: _buildActivityCard(
+                title: item['name'],
+                status: statusInfo['text'],
+                portion: "${item['portion']} Porsi",
+                statusColor: statusInfo['color'],
+                icon: Icons.fastfood_rounded,
+                imageUrl: item['photo_url'],
+              ),
+            );
+          }).toList(),
+
+          const SizedBox(height: 32),
+
+          // ================= AKTIVITAS REQUEST MAKANAN (DARI RECEIVER) =================
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Aktivitas Request Makanan",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black87,
+                ),
+              ),
+              Text(
+                "Lihat Semua",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2EA275),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          if (_recentRequests.isEmpty)
+            const Text(
+              "Anda belum mengajukan request makanan apapun.",
+              style: TextStyle(color: Colors.grey),
+            ),
+
+          ..._recentRequests.map((item) {
+            var statusInfo = _getStatusUI(item['status']);
+            // Mengambil ID
+            String itemId = item['_id'] is Map
+                ? item['_id']['\$oid']
+                : item['_id'].toString();
+
+            return GestureDetector(
+              onTap: () async {
+                // Menghubungkan ke detail request (Kebutuhan Sendiri)
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => RequestFoodDetailPage(foodId: itemId),
+                  ),
+                );
+                if (result == true) _fetchDashboardData();
+              },
+              child: _buildActivityCard(
+                title: item['name'],
+                status: statusInfo['text'],
+                portion: "${item['portion']} Porsi",
+                statusColor: statusInfo['color'],
+                icon: Icons.campaign_rounded,
+                imageUrl: item['photo_url'],
+              ),
+            );
+          }).toList(),
+
+          const SizedBox(height: 20),
         ],
       ),
     );
@@ -219,21 +420,19 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    // Daftar halaman untuk Bottom Navigation
     final List<Widget> pages = [
       _buildHomeContent(),
-      const Center(
-        child: Text("Halaman Riwayat Penerima"),
-      ), // Ganti dengan komponen History nanti
-      const Center(
-        child: Text("Halaman Profil Penerima"),
-      ), // Ganti dengan komponen Profil nanti
+      ReceiverHistoryPage(
+        onBackPressed: () => setState(() => _selectedIndex = 0),
+      ),
+      ReceiverProfilePage(
+        onBackPressed: () => setState(() => _selectedIndex = 0),
+        onLogout: _logout,
+      ),
     ];
 
     return Scaffold(
-      backgroundColor: const Color(
-        0xFFF4F6F8,
-      ), // Background abu-abu terang standar Donatur
+      backgroundColor: const Color(0xFFF4F6F8),
       appBar: _selectedIndex == 0
           ? AppBar(
               backgroundColor: Colors.white,
@@ -251,7 +450,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                     ),
                   ),
                   const Text(
-                    "Siap menerima kebaikan hari ini?",
+                    "Temukan bantuan untuk yayasan Anda",
                     style: TextStyle(
                       color: Colors.grey,
                       fontSize: 12,
@@ -263,17 +462,15 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
               actions: [
                 IconButton(
                   icon: const Icon(
-                    Icons.notifications_none_rounded,
-                    color: Colors.black87,
+                    Icons.logout_rounded,
+                    color: Colors.redAccent,
                   ),
-                  onPressed: () {},
+                  onPressed: _logout,
                 ),
               ],
             )
           : null,
       body: IndexedStack(index: _selectedIndex, children: pages),
-
-      // Bottom Navigation disamakan strukturnya (3 Tab: Beranda, Riwayat, Profil)
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
@@ -287,16 +484,8 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
           backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF2E7D32),
+          selectedItemColor: const Color(0xFF0F766E),
           unselectedItemColor: Colors.grey[400],
-          selectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 12,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 12,
-          ),
           type: BottomNavigationBarType.fixed,
           elevation: 0,
           onTap: (index) => setState(() {
@@ -320,8 +509,6 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
       ),
     );
   }
-
-  // --- HELPER WIDGETS ---
 
   Widget _buildSummaryCard({
     required String count,
@@ -375,136 +562,105 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
     );
   }
 
-  Widget _buildHorizontalFoodList() {
-    return SizedBox(
-      height: 250,
-      child: ListView.builder(
-        // Menghilangkan padding agar rata kiri sesuai style Donatur
-        padding: EdgeInsets.zero,
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        itemCount: _foodRecommendations.length,
-        itemBuilder: (context, index) {
-          final food = _foodRecommendations[index];
-          return Container(
-            width: 200,
-            margin: const EdgeInsets.only(right: 16, bottom: 10),
+  // WIDGET KARTU AKTIVITAS DENGAN GAMBAR (Mirip Donatur)
+  Widget _buildActivityCard({
+    required String title,
+    required String status,
+    required String portion,
+    required Color statusColor,
+    required IconData icon,
+    String? imageUrl,
+  }) {
+    String? fullImageUrl;
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      String serverUrl = ApiConfig.baseUrl.replaceAll('/api', '');
+      fullImageUrl = "$serverUrl/$imageUrl";
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 55,
+            height: 55,
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(
-                16,
-              ), // Rounded sama dengan aktivitas Donatur
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(
-                    0.02,
-                  ), // Bayangan soft khas Donatur UI
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              color: const Color(0xFFD1FAE5),
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: fullImageUrl != null
+                  ? Image.network(
+                      fullImageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          Icon(icon, color: const Color(0xFF0F766E), size: 26),
+                    )
+                  : Icon(icon, color: const Color(0xFF0F766E), size: 26),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Gambar Makanan
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(16),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: Colors.black87,
                   ),
-                  child: Image.network(
-                    food['image'],
-                    height: 110,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      height: 110,
-                      color: Colors.grey[200],
-                      child: const Icon(Icons.fastfood, color: Colors.grey),
-                    ),
-                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        food['name'],
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                          color: Colors.black87,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.circle, size: 10, color: statusColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      status,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.location_on,
-                            size: 14,
-                            color: Colors.grey[500],
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              food['location'],
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey[600],
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        food['time'],
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFFEA580C),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 32,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(
-                              0xFFF1F6D2,
-                            ), // Warna soft hijau button
-                            foregroundColor: const Color(
-                              0xFF2E7D32,
-                            ), // Teks hijau tua
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 0,
-                          ),
-                          onPressed: () {},
-                          child: const Text(
-                            "Ambil",
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          );
-        },
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              portion,
+              style: const TextStyle(
+                color: Colors.black87,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
