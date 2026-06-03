@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Jika merah, jalankan 'flutter pub add intl'
+import 'package:intl/intl.dart';
+import 'dart:io';
+import 'dart:convert';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/api_config.dart';
 
 class AddDonationPage extends StatefulWidget {
   const AddDonationPage({Key? key}) : super(key: key);
@@ -9,16 +15,73 @@ class AddDonationPage extends StatefulWidget {
 }
 
 class _AddDonationPageState extends State<AddDonationPage> {
-  // Controller untuk field teks (Sesuai dengan collection 'foods')
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _descController = TextEditingController();
+  final TextEditingController _categoryController = TextEditingController();
   final TextEditingController _portionController = TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _addressController =
+      TextEditingController(); // Controller Alamat
 
-  DateTime? _expiredDate;
-  TimeOfDay? _expiredTime;
+  DateTime? _collectionDate;
+  TimeOfDay? _collectionTime;
 
-  // Fungsi untuk memunculkan kalender dan jam
+  File? _imageFile;
+  bool _isLoading = false;
+  bool _isFetchingAddress = true; // Indikator loading untuk alamat
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDonorAddress(); // Ambil alamat otomatis saat halaman dibuka
+  }
+
+  // ==========================================
+  // FUNGSI: MENGAMBIL ALAMAT DARI PROFIL
+  // ==========================================
+  Future<void> _fetchDonorAddress() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('auth_token');
+
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/donor/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final profileData = jsonDecode(response.body)['data'];
+        setState(() {
+          // Isi controller dengan alamat dari database
+          _addressController.text =
+              profileData['address'] ?? 'Alamat belum diatur di profil';
+          _isFetchingAddress = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _addressController.text = 'Gagal mengambil alamat dari profil';
+        _isFetchingAddress = false;
+      });
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
+
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = File(pickedFile.path);
+      });
+    }
+  }
+
   Future<void> _pickDateTime() async {
     DateTime? pickedDate = await showDatePicker(
       context: context,
@@ -29,7 +92,7 @@ class _AddDonationPageState extends State<AddDonationPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF2E7D32), // Hijau utama kalender
+              primary: Color(0xFF2E7D32),
               onPrimary: Colors.white,
               onSurface: Colors.black,
             ),
@@ -44,21 +107,113 @@ class _AddDonationPageState extends State<AddDonationPage> {
         context: context,
         initialTime: TimeOfDay.now(),
       );
-
       if (pickedTime != null) {
         setState(() {
-          _expiredDate = pickedDate;
-          _expiredTime = pickedTime;
+          _collectionDate = pickedDate;
+          _collectionTime = pickedTime;
         });
       }
+    }
+  }
+
+  Future<void> _submitDonation() async {
+    if (_nameController.text.isEmpty ||
+        _categoryController.text.isEmpty ||
+        _portionController.text.isEmpty ||
+        _collectionDate == null ||
+        _collectionTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Mohon lengkapi semua data wajib!"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('auth_token');
+
+      DateTime combinedDateTime = DateTime(
+        _collectionDate!.year,
+        _collectionDate!.month,
+        _collectionDate!.day,
+        _collectionTime!.hour,
+        _collectionTime!.minute,
+      );
+      String formattedCollectionDate = DateFormat(
+        'yyyy-MM-dd HH:mm:ss',
+      ).format(combinedDateTime);
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiConfig.baseUrl}/donor/foods'),
+      );
+
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+
+      request.fields['name'] = _nameController.text;
+      request.fields['category'] = _categoryController.text;
+      request.fields['portion'] = _portionController.text;
+      request.fields['collection_date'] = formattedCollectionDate;
+      request.fields['note'] = _noteController.text;
+      // Opsional: Kirim pickup_address jika backend Laravel kamu membutuhkan datanya
+      request.fields['pickup_address'] = _addressController.text;
+
+      if (_imageFile != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath('photo', _imageFile!.path),
+        );
+      }
+
+      var streamedResponse = await request.send().timeout(
+        const Duration(seconds: 15),
+      );
+      var response = await http.Response.fromStream(streamedResponse);
+      var responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 201) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Donasi berhasil dibuat!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(responseData['message'] ?? "Gagal membuat donasi"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Terjadi kesalahan jaringan: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _descController.dispose();
+    _categoryController.dispose();
     _portionController.dispose();
+    _noteController.dispose();
     _addressController.dispose();
     super.dispose();
   }
@@ -77,7 +232,11 @@ class _AddDonationPageState extends State<AddDonationPage> {
         ),
         title: const Text(
           "Form Donasi Makanan",
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, fontSize: 18),
+          style: TextStyle(
+            color: Colors.black87,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
         ),
       ),
       body: SingleChildScrollView(
@@ -86,59 +245,128 @@ class _AddDonationPageState extends State<AddDonationPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ================= SECTION 1: UPLOAD FOTO =================
-            const Text("Upload Foto Makanan", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black87)),
+            const Text(
+              "Upload Foto Makanan",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: Colors.black87,
+              ),
+            ),
             const SizedBox(height: 12),
             GestureDetector(
-              onTap: () {
-                // TODO: Implementasi image_picker di sini
-              },
+              onTap: _pickImage,
               child: Container(
                 width: double.infinity,
                 height: 160,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF4F8EC), // Hijau sangat pucat
+                  color: const Color(0xFFF4F8EC),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF86D538).withOpacity(0.5), width: 2),
-                  // Catatan: Jika ingin efek garis putus-putus (dashed), bisa pakai package 'dotted_border'
+                  border: Border.all(
+                    color: const Color(0xFF86D538).withOpacity(0.5),
+                    width: 2,
+                  ),
+                  image: _imageFile != null
+                      ? DecorationImage(
+                          image: FileImage(_imageFile!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
-                      child: const Icon(Icons.camera_alt_rounded, color: Color(0xFF56AB2F), size: 30),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text("Klik untuk upload foto", style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF2E7D32))),
-                    const SizedBox(height: 4),
-                    Text("Format: JPG, PNG (Max 5MB)", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                  ],
-                ),
+                child: _imageFile == null
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt_rounded,
+                              color: Color(0xFF56AB2F),
+                              size: 30,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            "Klik untuk upload foto",
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF2E7D32),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "Format: JPG, PNG (Max 5MB)",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      )
+                    : Align(
+                        alignment: Alignment.topRight,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: CircleAvatar(
+                            backgroundColor: Colors.white,
+                            child: IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.green),
+                              onPressed: _pickImage,
+                            ),
+                          ),
+                        ),
+                      ),
               ),
             ),
-            
-            const SizedBox(height: 32),
 
-            // ================= SECTION 2: INFORMASI MAKANAN =================
-            const Text("Informasi Makanan", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black87)),
+            const SizedBox(height: 32),
+            const Text(
+              "Informasi Makanan",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: Colors.black87,
+              ),
+            ),
             const SizedBox(height: 16),
-            
+
             _buildLabel("Nama Makanan"),
-            _buildTextField("Cth: Nasi Kotak Ayam Bakar", controller: _nameController),
-            
-            _buildLabel("Deskripsi Singkat"),
-            _buildTextField("Cth: Nasi kotak sisa acara seminar, kondisi masih sangat baik...", controller: _descController, maxLines: 3),
-            
+            _buildTextField(
+              "Cth: Nasi Kotak Ayam Bakar",
+              controller: _nameController,
+            ),
+
+            _buildLabel("Kategori"),
+            _buildTextField(
+              "Cth: Makanan Berat / Minuman / Snack",
+              controller: _categoryController,
+            ),
+
             _buildLabel("Jumlah Porsi"),
-            _buildTextField("Cth: 15", controller: _portionController, keyboardType: TextInputType.number),
-            
-            _buildLabel("Waktu Kadaluarsa (Batas Konsumsi)"),
+            _buildTextField(
+              "Cth: 15",
+              controller: _portionController,
+              keyboardType: TextInputType.number,
+            ),
+
+            _buildLabel("Waktu Pengambilan (Collection Date)"),
             GestureDetector(
               onTap: _pickDateTime,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 16,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey[100],
                   borderRadius: BorderRadius.circular(14),
@@ -147,61 +375,65 @@ class _AddDonationPageState extends State<AddDonationPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      _expiredDate != null && _expiredTime != null
-                          ? "${DateFormat('dd MMM yyyy').format(_expiredDate!)} - ${_expiredTime!.format(context)}"
+                      _collectionDate != null && _collectionTime != null
+                          ? "${DateFormat('dd MMM yyyy').format(_collectionDate!)} - ${_collectionTime!.format(context)}"
                           : "Pilih tanggal & waktu",
                       style: TextStyle(
-                        color: _expiredDate != null ? Colors.black87 : Colors.grey[400],
+                        color: _collectionDate != null
+                            ? Colors.black87
+                            : Colors.grey[400],
                         fontSize: 14,
-                        fontWeight: _expiredDate != null ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: _collectionDate != null
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                       ),
                     ),
-                    const Icon(Icons.access_time_filled_rounded, color: Color(0xFF56AB2F)),
+                    const Icon(
+                      Icons.calendar_month_rounded,
+                      color: Color(0xFF56AB2F),
+                    ),
                   ],
                 ),
               ),
+            ),
+
+            const SizedBox(height: 16),
+            _buildLabel("Catatan Tambahan (Opsional)"),
+            _buildTextField(
+              "Cth: Tolong diambil dari pintu belakang...",
+              controller: _noteController,
+              maxLines: 2,
             ),
 
             const SizedBox(height: 32),
-
-            // ================= SECTION 3: LOKASI PENJEMPUTAN =================
-            const Text("Lokasi Penjemputan", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black87)),
-            const SizedBox(height: 16),
-            
-            _buildLabel("Alamat Lengkap"),
-            _buildTextField("Masukkan alamat detail penjemputan", controller: _addressController, maxLines: 2),
-
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: () {
-                // TODO: Buka Google Maps / Place Picker untuk set latitude & longitude
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9), // Hijau terang
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFF86D538).withOpacity(0.3)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.location_on_rounded, color: Color(0xFF2E7D32)),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        "Pilih Titik Lokasi (Maps)",
-                        style: TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.w700, fontSize: 14),
-                      ),
-                    ),
-                    Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF2E7D32), size: 16),
-                  ],
-                ),
+            const Text(
+              "Lokasi Penjemputan",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: Colors.black87,
               ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              "Otomatis menyesuaikan dengan alamat di profil Anda.",
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+
+            // ALAMAT PENJEMPUTAN (READ-ONLY)
+            _isFetchingAddress
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF2E7D32)),
+                  )
+                : _buildTextField(
+                    "Memuat alamat...",
+                    controller: _addressController,
+                    maxLines: 3,
+                    readOnly: true,
+                  ),
 
             const SizedBox(height: 40),
-
-            // ================= TOMBOL SUBMIT =================
             Container(
               width: double.infinity,
               height: 55,
@@ -211,19 +443,32 @@ class _AddDonationPageState extends State<AddDonationPage> {
                   colors: [Color(0xFF86D538), Color(0xFF2E7D32)],
                 ),
                 boxShadow: [
-                  BoxShadow(color: const Color(0xFF4CAF50).withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5)),
+                  BoxShadow(
+                    color: const Color(0xFF4CAF50).withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
                 ],
               ),
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
                 ),
-                onPressed: () {
-                  // TODO: Implement API Post Data Food ke Laravel
-                },
-                child: const Text("Submit Donasi", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                onPressed: _isLoading ? null : _submitDonation,
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text(
+                        "Submit Donasi",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 20),
@@ -236,24 +481,45 @@ class _AddDonationPageState extends State<AddDonationPage> {
   Widget _buildLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
-      child: Text(text, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87)),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: Colors.black87,
+        ),
+      ),
     );
   }
 
-  Widget _buildTextField(String hint, {required TextEditingController controller, int maxLines = 1, TextInputType keyboardType = TextInputType.text}) {
+  Widget _buildTextField(
+    String hint, {
+    required TextEditingController controller,
+    int maxLines = 1,
+    TextInputType keyboardType = TextInputType.text,
+    bool readOnly = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
         keyboardType: keyboardType,
+        readOnly: readOnly, // Mengunci textfield jika true
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
           filled: true,
-          fillColor: Colors.grey[100],
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          // Memberi warna abu-abu lebih gelap jika readOnly agar user tahu ini tidak bisa diketik
+          fillColor: readOnly ? Colors.grey[200] : Colors.grey[100],
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 16,
+          ),
         ),
       ),
     );

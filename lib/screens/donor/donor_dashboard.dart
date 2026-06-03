@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../../core/api_config.dart';
 import '../auth/role_selection_page.dart';
 import 'add_donation_page.dart';
-import 'donor_history_page.dart'; // Import halaman riwayat yang baru dibuat
-import 'donor_profile_page.dart'; // Import halaman profil
+import 'donor_history_page.dart';
+import 'donor_profile_page.dart';
 
 class DonorDashboard extends StatefulWidget {
   const DonorDashboard({Key? key}) : super(key: key);
@@ -14,6 +17,61 @@ class DonorDashboard extends StatefulWidget {
 
 class _DonorDashboardState extends State<DonorDashboard> {
   int _selectedIndex = 0;
+  bool _isLoading = true;
+
+  // Variabel untuk menampung data dari database
+  Map<String, dynamic> _summary = {'waiting': 0, 'active': 0, 'history': 0};
+  List<dynamic> _recentActivities = [];
+  String _donorName = "Donatur";
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData();
+  }
+
+  // FUNGSI MENGAMBIL DATA DARI BACKEND
+  Future<void> _fetchDashboardData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? token = prefs.getString('auth_token');
+
+    try {
+      // 1. Ambil data Dashboard (Summary & Recent Activities)
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/donor/dashboard'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      // 2. Ambil data Profil (untuk nama di AppBar)
+      final profileResponse = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/donor/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200 && profileResponse.statusCode == 200) {
+        final data = jsonDecode(response.body)['data'];
+        final profileData = jsonDecode(profileResponse.body)['data'];
+
+        setState(() {
+          _summary = data['summary'];
+          _recentActivities = data['recent_activities'];
+          _donorName = profileData['name'] ?? "Donatur";
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      print("Error fetching dashboard: $e");
+    }
+  }
 
   Future<void> _logout() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -25,14 +83,40 @@ class _DonorDashboardState extends State<DonorDashboard> {
     );
   }
 
-  // ================= KONTEN TAB BERANDA =================
+  // Bantuan untuk menerjemahkan status ke UI
+  Map<String, dynamic> _getStatusUI(String status) {
+    switch (status) {
+      case 'available':
+        return {"text": "Menunggu Donasi", "color": Colors.blue};
+      case 'accepted':
+      case 'on_delivery':
+        return {"text": "Sedang Diproses", "color": Colors.orange};
+      case 'completed':
+        return {"text": "Berhasil Disalurkan", "color": Colors.green};
+      case 'cancelled':
+        return {"text": "Dibatalkan", "color": Colors.red};
+      default:
+        return {"text": status, "color": Colors.grey};
+    }
+  }
+
   Widget _buildHomeContent() {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.only(top: 100.0),
+          child: CircularProgressIndicator(color: Color(0xFF2E7D32)),
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Banner Donasi
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -85,13 +169,15 @@ class _DonorDashboardState extends State<DonorDashboard> {
                       vertical: 12,
                     ),
                   ),
-                  onPressed: () {
-                    Navigator.push(
+                  onPressed: () async {
+                    // Tunggu form donasi selesai, lalu refresh data
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const AddDonationPage(),
                       ),
                     );
+                    _fetchDashboardData();
                   },
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -123,10 +209,11 @@ class _DonorDashboardState extends State<DonorDashboard> {
           ),
           const SizedBox(height: 16),
 
+          // Data Asli dari Backend
           Row(
             children: [
               _buildSummaryCard(
-                count: "23",
+                count: _summary['history'].toString(),
                 label: "Riwayat",
                 gradientColors: [
                   const Color(0xFFFB923C),
@@ -135,7 +222,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
               ),
               const SizedBox(width: 12),
               _buildSummaryCard(
-                count: "2",
+                count: _summary['active'].toString(),
                 label: "Donasi Aktif",
                 gradientColors: [
                   const Color(0xFF4ADE80),
@@ -144,7 +231,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
               ),
               const SizedBox(width: 12),
               _buildSummaryCard(
-                count: "5",
+                count: _summary['waiting'].toString(),
                 label: "Menunggu\nDonasi",
                 gradientColors: [
                   const Color(0xFF60A5FA),
@@ -155,10 +242,10 @@ class _DonorDashboardState extends State<DonorDashboard> {
           ),
 
           const SizedBox(height: 32),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 "Aktivitas Terkini",
                 style: TextStyle(
                   fontSize: 18,
@@ -166,39 +253,38 @@ class _DonorDashboardState extends State<DonorDashboard> {
                   color: Colors.black87,
                 ),
               ),
-              Text(
-                "Lihat Semua",
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF56AB2F),
+              GestureDetector(
+                onTap: () => setState(() => _selectedIndex = 1),
+                child: const Text(
+                  "Lihat Semua",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF56AB2F),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
 
-          _buildActivityCard(
-            title: "Nasi Kotak Ayam Bakar",
-            status: "Sedang dijemput kurir",
-            portion: "15 Porsi",
-            statusColor: Colors.blue,
-            icon: Icons.delivery_dining_rounded,
-          ),
-          _buildActivityCard(
-            title: "Kue Basah & Roti Sisa",
-            status: "Selesai disalurkan",
-            portion: "30 Porsi",
-            statusColor: Colors.green,
-            icon: Icons.check_circle_rounded,
-          ),
-          _buildActivityCard(
-            title: "Sayuran & Buah Segar",
-            status: "Menunggu kurir",
-            portion: "10 Kg",
-            statusColor: Colors.orange,
-            icon: Icons.pending_actions_rounded,
-          ),
+          // List Aktivitas dari Backend
+          if (_recentActivities.isEmpty)
+            const Text(
+              "Belum ada aktivitas donasi.",
+              style: TextStyle(color: Colors.grey),
+            ),
+
+          ..._recentActivities.map((item) {
+            var statusInfo = _getStatusUI(item['status']);
+            return _buildActivityCard(
+              title: item['name'],
+              status: statusInfo['text'],
+              portion: "${item['portion']} Porsi",
+              statusColor: statusInfo['color'],
+              icon: Icons.fastfood_rounded,
+            );
+          }).toList(),
         ],
       ),
     );
@@ -206,49 +292,40 @@ class _DonorDashboardState extends State<DonorDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    // Array halaman untuk menukar tampilan body berdasarkan Tab yang diklik
     final List<Widget> pages = [
-      _buildHomeContent(), // Index 0: Beranda
+      _buildHomeContent(),
       DonorHistoryPage(
-        onBackPressed: () {
-          setState(() {
-            _selectedIndex = 0;
-          });
-        },
-      ), // Index 1: Riwayat
+        onBackPressed: () => setState(() {
+          _selectedIndex = 0;
+        }),
+      ),
       DonorProfilePage(
-        onBackPressed: () {
-          setState(() {
-            _selectedIndex = 0;
-          });
-        },
-        onLogout: _logout, // Melempar fungsi Sign Out ke halaman profil
-      ), // Index 2: Profil
+        onBackPressed: () => setState(() {
+          _selectedIndex = 0;
+        }),
+        onLogout: _logout,
+      ),
     ];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F8),
-
-      // ============ APP BAR ============
-      // AppBar Default hanya akan muncul jika pengguna berada di tab Beranda (index 0)
-      // Karena tab Riwayat sudah memiliki custom header hijau sendiri di dalam body-nya.
       appBar: _selectedIndex == 0
           ? AppBar(
               backgroundColor: Colors.white,
               elevation: 0,
               automaticallyImplyLeading: false,
-              title: const Column(
+              title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Halo, Donatur 👋",
-                    style: TextStyle(
+                    "Halo, $_donorName 👋",
+                    style: const TextStyle(
                       color: Colors.black87,
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  Text(
+                  const Text(
                     "Mari berbagi makanan hari ini",
                     style: TextStyle(
                       color: Colors.grey,
@@ -258,61 +335,9 @@ class _DonorDashboardState extends State<DonorDashboard> {
                   ),
                 ],
               ),
-              actions: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.logout_rounded,
-                    color: Colors.redAccent,
-                  ),
-                  tooltip: "Logout",
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text(
-                          "Keluar",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        content: const Text(
-                          "Apakah Anda yakin ingin keluar dari akun ini?",
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text(
-                              "Batal",
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _logout();
-                            },
-                            child: const Text(
-                              "Ya, Keluar",
-                              style: TextStyle(
-                                color: Colors.red,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(width: 8),
-              ],
             )
-          : null, // Sembunyikan AppBar saat berada di Tab Riwayat atau Profil
-      // Gunakan IndexedStack agar state scroll/posisi halaman tidak hilang saat berganti tab
+          : null,
       body: IndexedStack(index: _selectedIndex, children: pages),
-
-      // ============ BOTTOM NAVIGATION BAR ============
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
@@ -338,11 +363,9 @@ class _DonorDashboardState extends State<DonorDashboard> {
           ),
           type: BottomNavigationBarType.fixed,
           elevation: 0,
-          onTap: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
+          onTap: (index) => setState(() {
+            _selectedIndex = index;
+          }),
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.home_rounded),
@@ -443,11 +466,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
               color: const Color(0xFFF1F6D2),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(
-              Icons.fastfood_rounded,
-              color: Color(0xFF56AB2F),
-              size: 26,
-            ),
+            child: Icon(icon, color: const Color(0xFF56AB2F), size: 26),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -467,8 +486,8 @@ class _DonorDashboardState extends State<DonorDashboard> {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(icon, size: 14, color: statusColor),
-                    const SizedBox(width: 4),
+                    Icon(Icons.circle, size: 10, color: statusColor),
+                    const SizedBox(width: 6),
                     Text(
                       status,
                       style: TextStyle(

@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
-// Pastikan path import ini sesuai dengan lokasi file splash_screen.dart kamu
+import 'package:intl/date_symbol_data_local.dart'; // <-- IMPORT INI UNTUK FORMAT TANGGAL
 import 'screens/splash_screen.dart';
 
-void main() {
+void main() async {
+  // Wajib ditambahkan jika kita menggunakan fungsi async di dalam main()
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Inisialisasi data lokal untuk format tanggal Bahasa Indonesia ('id_ID')
+  await initializeDateFormatting('id_ID', null);
+
   runApp(const MyApp());
 }
 
@@ -13,13 +19,11 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'RE-FOOD',
-      debugShowCheckedModeBanner:
-          false, // Menghilangkan banner tulisan "DEBUG" di pojok kanan atas
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.green,
         scaffoldBackgroundColor: Colors.white,
       ),
-      // Di sini kita mengatur agar SplashScreen yang pertama kali muncul
       home: SplashScreen(),
     );
   }

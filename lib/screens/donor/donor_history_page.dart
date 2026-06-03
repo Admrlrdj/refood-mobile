@@ -1,50 +1,100 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:intl/intl.dart';
+import '../../core/api_config.dart';
 
-class DonorHistoryPage extends StatelessWidget {
+class DonorHistoryPage extends StatefulWidget {
   final VoidCallback onBackPressed;
 
-  // Menerima fungsi onBackPressed agar tombol panah kiri bisa mengembalikan tab ke Beranda
   const DonorHistoryPage({Key? key, required this.onBackPressed})
     : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    // Dummy Data Riwayat yang dikelompokkan berdasarkan tanggal
-    final List<Map<String, dynamic>> historyData = [
-      {
-        "date": "Minggu, 1 Maret 2026",
-        "items": [
-          {
-            "name": "Ayam Bakar",
-            "type": "Makanan",
-            "status": "Menunggu Kurir",
-            "statusColor": const Color(0xFFFBBF24), // Kuning/Orange
-            "icon": Icons.fastfood_rounded,
-          },
-          {
-            "name": "Nasi Goreng",
-            "type": "Makanan",
-            "status": "Berhasil",
-            "statusColor": const Color(0xFF22C55E), // Hijau
-            "icon": Icons.fastfood_rounded,
-          },
-        ],
-      },
-      {
-        "date": "Sabtu, 28 Februari 2026",
-        "items": [
-          {
-            "name": "Es Teh",
-            "type": "Minuman",
-            "status": "Gagal",
-            "statusColor": const Color(0xFFEF4444), // Merah
-            "icon": Icons.local_drink_rounded,
-          },
-        ],
-      },
-      {"date": "Jum'at, 27 Februari 2026", "items": []},
-    ];
+  _DonorHistoryPageState createState() => _DonorHistoryPageState();
+}
 
+class _DonorHistoryPageState extends State<DonorHistoryPage> {
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _groupedHistory = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchHistoryData();
+  }
+
+  Future<void> _fetchHistoryData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? token = prefs.getString('auth_token');
+
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/donor/history'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body)['data'];
+
+        // Mengelompokkan data berdasarkan tanggal
+        Map<String, List<dynamic>> tempMap = {};
+
+        for (var item in data) {
+          // Parse tanggal dari MongoDB
+          DateTime date = DateTime.parse(item['created_at']).toLocal();
+          String formattedDate = DateFormat(
+            'dd MMMM yyyy',
+          ).format(date); // cth: 15 Maret 2026
+
+          if (!tempMap.containsKey(formattedDate)) {
+            tempMap[formattedDate] = [];
+          }
+          tempMap[formattedDate]!.add(item);
+        }
+
+        // Konversi map menjadi list sesuai dengan UI
+        List<Map<String, dynamic>> finalGroupedList = [];
+        tempMap.forEach((key, value) {
+          finalGroupedList.add({"date": key, "items": value});
+        });
+
+        setState(() {
+          _groupedHistory = finalGroupedList;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Error fetching history: $e");
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Translasi status warna
+  Map<String, dynamic> _getStatusUI(String status) {
+    switch (status) {
+      case 'available':
+        return {"text": "Menunggu Donasi", "color": Colors.blue};
+      case 'accepted':
+      case 'on_delivery':
+        return {"text": "Sedang Diantar", "color": Colors.orange};
+      case 'completed':
+        return {"text": "Berhasil", "color": Colors.green};
+      case 'cancelled':
+        return {"text": "Gagal", "color": Colors.red};
+      default:
+        return {"text": status, "color": Colors.grey};
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
@@ -55,11 +105,10 @@ class DonorHistoryPage extends StatelessWidget {
         ),
       ),
       child: SafeArea(
-        bottom:
-            false, // Membiarkan container putih menyentuh area bawah (bottom nav)
+        bottom: false,
         child: Column(
           children: [
-            // ================= HEADER =================
+            // HEADER
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 20.0,
@@ -67,9 +116,8 @@ class DonorHistoryPage extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  // Tombol Back (Mengarahkan kembali ke Tab Beranda)
                   InkWell(
-                    onTap: onBackPressed,
+                    onTap: widget.onBackPressed,
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: const BoxDecoration(
@@ -84,7 +132,6 @@ class DonorHistoryPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 16),
-
                   const Text(
                     "Riwayat",
                     style: TextStyle(
@@ -93,45 +140,12 @@ class DonorHistoryPage extends StatelessWidget {
                       color: Colors.white,
                     ),
                   ),
-
-                  const Spacer(),
-
-                  // Dropdown Filter Tanggal
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          "Tanggal",
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        SizedBox(width: 4),
-                        Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          size: 16,
-                          color: Colors.black87,
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
             const SizedBox(height: 10),
 
-            // ================= KONTEN LIST RIWAYAT =================
+            // LIST KONTEN
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -143,105 +157,106 @@ class DonorHistoryPage extends StatelessWidget {
                     topRight: Radius.circular(30),
                   ),
                 ),
-                child: ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: historyData.length,
-                  itemBuilder: (context, index) {
-                    final group = historyData[index];
-                    final date = group["date"];
-                    final items = group["items"] as List<dynamic>;
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF2E7D32),
+                        ),
+                      )
+                    : _groupedHistory.isEmpty
+                    ? const Center(
+                        child: Text(
+                          "Belum ada riwayat donasi.",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: _groupedHistory.length,
+                        itemBuilder: (context, index) {
+                          final group = _groupedHistory[index];
+                          final date = group["date"];
+                          final items = group["items"] as List<dynamic>;
 
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Teks Tanggal
-                          Text(
-                            date,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Jika Kosong
-                          if (items.isEmpty)
-                            const Text(
-                              "Tidak ada aktivitas di hari ini.",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-
-                          // Iterasi Item Makanan/Minuman
-                          ...items.asMap().entries.map((entry) {
-                            int itemIndex = entry.key;
-                            var item = entry.value;
-                            return Column(
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 24.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      item["icon"],
-                                      color: Colors.black87,
-                                      size: 24,
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Text(
-                                        item["name"],
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          item["status"],
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w800,
-                                            color: item["statusColor"],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          item["type"],
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w500,
-                                            color: Colors.grey,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                // Tambahkan Divider jika ini BUKAN item terakhir di grup tersebut
-                                if (itemIndex != items.length - 1)
-                                  const Divider(
-                                    height: 32,
-                                    thickness: 1,
-                                    color: Color(0xFFEEEEEE),
+                                Text(
+                                  date,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.black87,
                                   ),
+                                ),
+                                const SizedBox(height: 16),
+
+                                ...items.asMap().entries.map((entry) {
+                                  int itemIndex = entry.key;
+                                  var item = entry.value;
+                                  var statusInfo = _getStatusUI(item['status']);
+
+                                  return Column(
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.fastfood_rounded,
+                                            color: Colors.black87,
+                                            size: 24,
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: Text(
+                                              item["name"],
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.black87,
+                                              ),
+                                            ),
+                                          ),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                statusInfo["text"],
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: statusInfo["color"],
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                "${item['portion']} Porsi",
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: Colors.grey,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                      if (itemIndex != items.length - 1)
+                                        const Divider(
+                                          height: 32,
+                                          thickness: 1,
+                                          color: Color(0xFFEEEEEE),
+                                        ),
+                                    ],
+                                  );
+                                }).toList(),
                               ],
-                            );
-                          }).toList(),
-                        ],
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
             ),
           ],
