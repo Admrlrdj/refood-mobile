@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../core/api_config.dart';
+// TODO: Pastikan path import ini sesuai dengan lokasi file MapPickerPage Anda
+import '../widgets/map_picker_page.dart';
 
 class RegisterPage extends StatefulWidget {
+  const RegisterPage({Key? key}) : super(key: key);
+
   @override
   _RegisterPageState createState() => _RegisterPageState();
 }
@@ -50,7 +54,7 @@ class _RegisterPageState extends State<RegisterPage> {
         },
         body: jsonEncode({
           'name': _nameController.text,
-          'username': _usernameController.text, // <-- Tambahkan ini
+          'username': _usernameController.text,
           'restaurant_name': _restaurantNameController.text,
           'email': _emailController.text,
           'phone': _phoneController.text,
@@ -104,6 +108,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _restaurantNameController.dispose();
     _nameController.dispose();
     _emailController.dispose();
+    _usernameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
     _passwordController.dispose();
@@ -212,7 +217,6 @@ class _RegisterPageState extends State<RegisterPage> {
                     "Cth: donatur_sejati",
                     controller: _usernameController,
                   ),
-                  
 
                   _buildLabel("Email"),
                   _buildTextField(
@@ -228,13 +232,14 @@ class _RegisterPageState extends State<RegisterPage> {
                     keyboardType: TextInputType.phone,
                   ),
 
+                  // --- BAGIAN YANG DIUBAH: ALAMAT MENGGUNAKAN MAPS ---
                   _buildLabel("Alamat Lengkap"),
-                  _buildTextField(
-                    "Masukkan alamat lengkap",
+                  _buildAddressField(
+                    "Pilih lokasi dari Peta",
                     controller: _addressController,
-                    maxLines: 3,
                   ),
 
+                  // --------------------------------------------------
                   _buildLabel("Password"),
                   TextFormField(
                     controller: _passwordController,
@@ -298,9 +303,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           borderRadius: BorderRadius.circular(30),
                         ),
                       ),
-                      onPressed: _isLoading
-                          ? null
-                          : _handleRegister, // Panggil API
+                      onPressed: _isLoading ? null : _handleRegister,
                       child: _isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
@@ -389,6 +392,51 @@ class _RegisterPageState extends State<RegisterPage> {
           horizontal: 18,
           vertical: 16,
         ),
+      ),
+    );
+  }
+
+  // --- BAGIAN YANG DITAMBAHKAN: HELPER UNTUK ALAMAT VIA MAPS ---
+  Widget _buildAddressField(
+    String hint, {
+    required TextEditingController controller,
+  }) {
+    return TextFormField(
+      controller: controller,
+      readOnly: true, // User tidak mengetik manual, harus klik maps
+      onTap: () async {
+        // Navigasi ke Map Picker dan tunggu hasilnya
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const MapPickerPage()),
+        );
+
+        // Jika user memilih lokasi (tidak sekadar memencet tombol back)
+        if (result != null) {
+          setState(() {
+            controller.text = result['address'];
+
+            // NOTE: Jika Anda ingin menyimpan Latitude & Longitude ke database Donatur nanti,
+            // Anda bisa simpan result['latitude'] dan result['longitude'] ke variabel state di sini.
+          });
+        }
+      },
+      maxLines: 3,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+        filled: true,
+        fillColor: Colors.grey[100],
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
+        ),
+        // Tambahkan Icon Maps di kanan form
+        suffixIcon: const Icon(Icons.map_rounded, color: Color(0xFF56AB2F)),
       ),
     );
   }
