@@ -1,147 +1,116 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'dart:io';
-import 'dart:convert';
-import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api_config.dart';
 
 class EditDonationPage extends StatefulWidget {
-  final Map<String, dynamic> foodData;
+  final Map<String, dynamic> donationData;
 
-  const EditDonationPage({Key? key, required this.foodData}) : super(key: key);
+  const EditDonationPage({Key? key, required this.donationData})
+    : super(key: key);
 
   @override
   _EditDonationPageState createState() => _EditDonationPageState();
 }
 
 class _EditDonationPageState extends State<EditDonationPage> {
+  final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
+
+  // Controllers untuk Form
   late TextEditingController _nameController;
   late TextEditingController _categoryController;
   late TextEditingController _portionController;
   late TextEditingController _noteController;
 
-  DateTime? _collectionDate;
-  TimeOfDay? _collectionTime;
-  File? _imageFile;
-  bool _isLoading = false;
-
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.foodData['name']);
+    // Pre-fill data (Isi otomatis kolom dengan data sebelumnya)
+    _nameController = TextEditingController(
+      text: widget.donationData['name']?.toString() ?? '',
+    );
     _categoryController = TextEditingController(
-      text: widget.foodData['category'],
+      text: widget.donationData['category']?.toString() ?? 'Umum',
     );
     _portionController = TextEditingController(
-      text: widget.foodData['portion'].toString(),
+      text: widget.donationData['portion']?.toString() ?? '',
     );
-    _noteController = TextEditingController(text: widget.foodData['note']);
-
-    DateTime parsedDate = DateTime.parse(
-      widget.foodData['collection_date'],
-    ).toLocal();
-    _collectionDate = parsedDate;
-    _collectionTime = TimeOfDay.fromDateTime(parsedDate);
+    _noteController = TextEditingController(
+      text: widget.donationData['note']?.toString() ?? '',
+    );
   }
 
-  Future<void> _pickImage() async {
-    final XFile? pickedFile = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 70,
-    );
-    if (pickedFile != null) setState(() => _imageFile = File(pickedFile.path));
-  }
-
-  Future<void> _pickDateTime() async {
-    DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: _collectionDate ?? DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 30)),
-    );
-    if (pickedDate != null) {
-      TimeOfDay? pickedTime = await showTimePicker(
-        context: context,
-        initialTime: _collectionTime ?? TimeOfDay.now(),
-      );
-      if (pickedTime != null)
-        setState(() {
-          _collectionDate = pickedDate;
-          _collectionTime = pickedTime;
-        });
-    }
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _categoryController.dispose();
+    _portionController.dispose();
+    _noteController.dispose();
+    super.dispose();
   }
 
   Future<void> _updateDonation() async {
+    if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isLoading = true);
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? token = prefs.getString('auth_token');
+
+    // Ambil ID yang kebal dari format MongoDB
+    var rawId = widget.donationData['id'] ?? widget.donationData['_id'];
+    String donationId = rawId is Map
+        ? rawId['\$oid'].toString()
+        : rawId.toString();
 
     try {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? token = prefs.getString('auth_token');
-
-      DateTime combinedDateTime = DateTime(
-        _collectionDate!.year,
-        _collectionDate!.month,
-        _collectionDate!.day,
-        _collectionTime!.hour,
-        _collectionTime!.minute,
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/donor/foods/$donationId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json', // PENTING untuk kirim data JSON
+        },
+        body: jsonEncode({
+          'name': _nameController.text,
+          'category': _categoryController.text,
+          'portion': _portionController.text,
+          'note': _noteController.text,
+        }),
       );
-      String formattedCollectionDate = DateFormat(
-        'yyyy-MM-dd HH:mm:ss',
-      ).format(combinedDateTime);
-
-      // Extract ID secara aman dari objek BSON MongoDB
-      String id = widget.foodData['_id'] is Map
-          ? widget.foodData['_id']['\$oid']
-          : widget.foodData['_id'];
-
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${ApiConfig.baseUrl}/donor/foods/$id'),
-      );
-      request.headers['Authorization'] = 'Bearer $token';
-      request.headers['Accept'] = 'application/json';
-
-      request.fields['name'] = _nameController.text;
-      request.fields['category'] = _categoryController.text;
-      request.fields['portion'] = _portionController.text;
-      request.fields['collection_date'] = formattedCollectionDate;
-      request.fields['note'] = _noteController.text;
-
-      if (_imageFile != null)
-        request.files.add(
-          await http.MultipartFile.fromPath('photo', _imageFile!.path),
-        );
-
-      var streamedResponse = await request.send().timeout(
-        const Duration(seconds: 15),
-      );
-      var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Berhasil diupdate!"),
+            content: Text("Donasi berhasil diperbarui!"),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context, true);
+        Navigator.pop(
+          context,
+          true,
+        ); // Kembali & lempar nilai 'true' agar Dashboard ter-refresh
       } else {
+        final errorData = jsonDecode(response.body);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Gagal mengupdate"),
+          SnackBar(
+            content: Text(
+              "Gagal: ${errorData['message'] ?? 'Terjadi kesalahan'}",
+            ),
             backgroundColor: Colors.red,
           ),
         );
+        setState(() => _isLoading = false);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-      );
-    } finally {
       setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Terjadi kesalahan koneksi"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -152,6 +121,7 @@ class _EditDonationPageState extends State<EditDonationPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
@@ -165,116 +135,176 @@ class _EditDonationPageState extends State<EditDonationPage> {
           ),
         ),
       ),
-      body: SingleChildScrollView(
+      bottomNavigationBar: Container(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              onTap: _pickImage,
-              child: Container(
-                width: double.infinity,
-                height: 160,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF4F8EC),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFF86D538).withOpacity(0.5),
-                    width: 2,
-                  ),
-                  image: _imageFile != null
-                      ? DecorationImage(
-                          image: FileImage(_imageFile!),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                ),
-                child: _imageFile == null
-                    ? const Center(
-                        child: Text(
-                          "Ganti Foto (Opsional)",
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF2E7D32),
-                          ),
-                        ),
-                      )
-                    : null,
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: "Nama Makanan",
-                filled: true,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _categoryController,
-              decoration: const InputDecoration(
-                labelText: "Kategori",
-                filled: true,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _portionController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: "Jumlah Porsi",
-                filled: true,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            GestureDetector(
-              onTap: _pickDateTime,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  "${DateFormat('dd MMM yyyy').format(_collectionDate!)} - ${_collectionTime!.format(context)}",
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _noteController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: "Catatan",
-                filled: true,
-              ),
-            ),
-
-            const SizedBox(height: 40),
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2E7D32),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                ),
-                onPressed: _isLoading ? null : _updateDonation,
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        "Simpan Perubahan",
-                        style: TextStyle(fontSize: 18, color: Colors.white),
-                      ),
-              ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
             ),
           ],
         ),
+        child: SizedBox(
+          width: double.infinity,
+          height: 55,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7D32),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            onPressed: _isLoading ? null : _updateDonation,
+            child: _isLoading
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text(
+                    "Simpan Perubahan",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+          ),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        physics: const BouncingScrollPhysics(),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: Colors.orange.shade800,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        "Anda hanya bisa mengubah detail donasi yang berstatus 'Menunggu'.",
+                        style: TextStyle(
+                          color: Colors.orange.shade900,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              _buildInputLabel("Nama Makanan"),
+              TextFormField(
+                controller: _nameController,
+                decoration: _inputStyle(
+                  "Misal: Nasi Goreng Spesial",
+                  Icons.fastfood_rounded,
+                ),
+                validator: (value) =>
+                    value!.isEmpty ? 'Nama makanan tidak boleh kosong' : null,
+              ),
+              const SizedBox(height: 20),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildInputLabel("Kategori"),
+                        TextFormField(
+                          controller: _categoryController,
+                          decoration: _inputStyle(
+                            "Misal: Makanan Berat",
+                            Icons.category_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildInputLabel("Jumlah Porsi"),
+                        TextFormField(
+                          controller: _portionController,
+                          keyboardType: TextInputType.number,
+                          decoration: _inputStyle(
+                            "Misal: 10",
+                            Icons.restaurant_rounded,
+                          ),
+                          validator: (value) =>
+                              value!.isEmpty ? 'Porsi wajib diisi' : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              _buildInputLabel("Catatan Khusus (Opsional)"),
+              TextFormField(
+                controller: _noteController,
+                maxLines: 3,
+                decoration: _inputStyle(
+                  "Beri tahu informasi tambahan terkait kondisi makanan, kepedasan, dll.",
+                  Icons.notes_rounded,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0, left: 4),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _inputStyle(String hint, IconData icon) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+      prefixIcon: Icon(icon, color: Colors.grey.shade400, size: 20),
+      filled: true,
+      fillColor: const Color(0xFFF9FAFB),
+      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Color(0xFF2E7D32), width: 1.5),
       ),
     );
   }

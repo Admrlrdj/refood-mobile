@@ -44,31 +44,28 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
           _isLoading = false;
         });
       } else {
-        // FIX: Tangkap error dari backend agar tidak cuma blank "-"
         final err = jsonDecode(response.body);
         setState(() => _isLoading = false);
-        if (mounted) {
+        if (mounted)
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text("Error API: ${err['message']}"),
               backgroundColor: Colors.red,
             ),
           );
-        }
       }
     } catch (e) {
       setState(() => _isLoading = false);
-      print("Error detail donasi: $e");
     }
   }
 
-  Future<void> _deleteDonation() async {
+  Future<void> _cancelDonation() async {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Batalkan Donasi?"),
         content: const Text(
-          "Apakah Anda yakin ingin membatalkan/menghapus donasi makanan ini?",
+          "Apakah Anda yakin ingin membatalkan donasi makanan ini? Statusnya akan berubah menjadi Invalid dan bisa dihapus permanen di beranda.",
         ),
         actions: [
           TextButton(
@@ -84,9 +81,10 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
               String? token = prefs.getString('auth_token');
 
               try {
-                final res = await http.delete(
+                // Tembak Rute CANCEL
+                final res = await http.post(
                   Uri.parse(
-                    '${ApiConfig.baseUrl}/donor/foods/${widget.donationId}',
+                    '${ApiConfig.baseUrl}/donor/foods/${widget.donationId}/cancel',
                   ),
                   headers: {
                     'Authorization': 'Bearer $token',
@@ -95,13 +93,18 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
                 );
 
                 if (res.statusCode == 200) {
+                  // AUTO UPDATE LOKAL (Ganti status seketika di RAM)
+                  setState(() {
+                    _donationData['status'] = 'invalid';
+                    _isLoading = false;
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text("Donasi berhasil dibatalkan"),
+                      content: Text("Donasi berhasil dibatalkan!"),
                       backgroundColor: Colors.red,
                     ),
                   );
-                  Navigator.pop(context, true); // Pulang ke dashboard & refresh
+                  // Kita TIDAK Navigator.pop, biarkan dia melihat status merah "INVALID"
                 } else {
                   setState(() => _isLoading = false);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -127,18 +130,14 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (_isLoading)
       return const Scaffold(
         backgroundColor: Colors.white,
         body: Center(
           child: CircularProgressIndicator(color: Color(0xFF2E7D32)),
         ),
       );
-    }
 
-    // ==========================================
-    // PARSING DATA SESUAI MONGODB
-    // ==========================================
     final foodName = _donationData['name']?.toString() ?? '-';
     final portion = _donationData['portion']?.toString() ?? '-';
     final note = _donationData['note']?.toString() ?? '-';
@@ -147,24 +146,13 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
 
     String collectionDateStr = "-";
     var rawDate = _donationData['collection_date'];
-
     if (rawDate != null) {
       try {
-        DateTime parsedDate;
-
-        if (rawDate is Map && rawDate.containsKey('\$date')) {
-          parsedDate = DateTime.parse(rawDate['\$date'].toString()).toLocal();
-        } else {
-          parsedDate = DateTime.parse(rawDate.toString()).toLocal();
-        }
-
-        String day = parsedDate.day.toString().padLeft(2, '0');
-        String month = parsedDate.month.toString().padLeft(2, '0');
-        String year = parsedDate.year.toString();
-        String hour = parsedDate.hour.toString().padLeft(2, '0');
-        String minute = parsedDate.minute.toString().padLeft(2, '0');
-
-        collectionDateStr = "$year-$month-$day $hour:$minute";
+        DateTime parsedDate = (rawDate is Map && rawDate.containsKey('\$date'))
+            ? DateTime.parse(rawDate['\$date'].toString()).toLocal()
+            : DateTime.parse(rawDate.toString()).toLocal();
+        collectionDateStr =
+            "${parsedDate.year}-${parsedDate.month.toString().padLeft(2, '0')}-${parsedDate.day.toString().padLeft(2, '0')} ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}";
       } catch (e) {
         collectionDateStr = rawDate.toString();
       }
@@ -172,9 +160,8 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
 
     final imageUrl = _donationData['photo_url'];
     String? fullImageUrl;
-    if (imageUrl != null && imageUrl.toString().isNotEmpty) {
+    if (imageUrl != null && imageUrl.toString().isNotEmpty)
       fullImageUrl = "${ApiConfig.baseUrl.replaceAll('/api', '')}/$imageUrl";
-    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F8),
@@ -182,9 +169,10 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
+        // PENTING: Saat menekan tombol BACK (kembali), lempar nilai 'true' agar Dashboard tahu harus me-refresh data
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, true),
         ),
         title: const Text(
           "Detail Donasi Anda",
@@ -196,6 +184,7 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
         ),
       ),
 
+      // TOMBOL BATALKAN HANYA ADA JIKA STATUS AVAILABLE/PENDING
       bottomNavigationBar:
           (status == 'available' ||
               status == 'waiting_donor' ||
@@ -222,7 +211,7 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
                       borderRadius: BorderRadius.circular(30),
                     ),
                   ),
-                  onPressed: _isLoading ? null : _deleteDonation,
+                  onPressed: _isLoading ? null : _cancelDonation,
                   child: const Text(
                     "Batalkan Donasi Ini",
                     style: TextStyle(
@@ -247,19 +236,29 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.green.shade100),
+                border: Border.all(
+                  color: status == 'invalid'
+                      ? Colors.red.shade100
+                      : Colors.green.shade100,
+                ),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFE8F5E9),
+                    decoration: BoxDecoration(
+                      color: status == 'invalid'
+                          ? Colors.red.shade50
+                          : const Color(0xFFE8F5E9),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.volunteer_activism_rounded,
-                      color: Color(0xFF2E7D32),
+                    child: Icon(
+                      status == 'invalid'
+                          ? Icons.cancel_rounded
+                          : Icons.volunteer_activism_rounded,
+                      color: status == 'invalid'
+                          ? Colors.red
+                          : const Color(0xFF2E7D32),
                       size: 30,
                     ),
                   ),
@@ -287,10 +286,12 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
                             const SizedBox(width: 4),
                             Text(
                               "Status: ${status.toUpperCase()}",
-                              style: const TextStyle(
-                                color: Colors.grey,
+                              style: TextStyle(
+                                color: status == 'invalid'
+                                    ? Colors.red
+                                    : Colors.grey,
                                 fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
                           ],
@@ -302,7 +303,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
               ),
             ),
             const SizedBox(height: 24),
-
             const Text(
               "Detail Kebutuhan",
               style: TextStyle(
@@ -312,7 +312,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
               ),
             ),
             const SizedBox(height: 16),
-
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -337,7 +336,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
               ),
             ),
             const SizedBox(height: 24),
-
             const Text(
               "Waktu Pengambilan",
               style: TextStyle(
@@ -347,7 +345,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
               ),
             ),
             const SizedBox(height: 16),
-
             Container(
               padding: const EdgeInsets.all(20),
               width: double.infinity,
@@ -389,7 +386,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
               ),
             ),
             const SizedBox(height: 24),
-
             if (fullImageUrl != null) ...[
               const Text(
                 "Foto Dokumentasi",
