@@ -7,7 +7,7 @@ import '../../core/api_config.dart';
 // Import Dashboard
 import '../donor/donor_dashboard.dart';
 import '../receiver/receiver_dashboard.dart';
-// import '../volunteer/volunteer_dashboard.dart';
+import '../volunteer/volunteer_dashboard.dart';
 
 // Import Role Selection & Register Pages
 import 'role_selection_page.dart';
@@ -110,11 +110,11 @@ class _LoginPageState extends State<LoginPage> {
             (route) => false,
           );
         } else if (role == 'volunteer') {
-          // Navigator.pushAndRemoveUntil(
-          //   context,
-          //   MaterialPageRoute(builder: (_) => const VolunteerDashboard()),
-          //   (route) => false,
-          // );
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const VolunteerDashboard()),
+            (route) => false,
+          );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

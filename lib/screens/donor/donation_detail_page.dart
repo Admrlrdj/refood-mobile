@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart';
 import '../../core/api_config.dart';
-import 'edit_donation_page.dart';
 
 class DonationDetailPage extends StatefulWidget {
-  final String foodId;
+  final String donationId;
 
-  const DonationDetailPage({Key? key, required this.foodId}) : super(key: key);
+  const DonationDetailPage({Key? key, required this.donationId})
+    : super(key: key);
 
   @override
   _DonationDetailPageState createState() => _DonationDetailPageState();
@@ -17,21 +16,21 @@ class DonationDetailPage extends StatefulWidget {
 
 class _DonationDetailPageState extends State<DonationDetailPage> {
   bool _isLoading = true;
-  Map<String, dynamic>? _foodData;
+  Map<String, dynamic> _donationData = {};
 
   @override
   void initState() {
     super.initState();
-    _fetchDetail();
+    _fetchDonationDetail();
   }
 
-  Future<void> _fetchDetail() async {
+  Future<void> _fetchDonationDetail() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? token = prefs.getString('auth_token');
 
     try {
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/donor/foods/${widget.foodId}'),
+        Uri.parse('${ApiConfig.baseUrl}/donor/foods/${widget.donationId}'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
@@ -40,29 +39,15 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
 
       if (response.statusCode == 200) {
         setState(() {
-          _foodData = jsonDecode(response.body)['data'];
+          _donationData = jsonDecode(response.body)['data'] ?? {};
           _isLoading = false;
         });
       } else {
-        // MENGATASI INFINITE LOADING JIKA SERVER ERROR / 404
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Gagal memuat detail data."),
-            backgroundColor: Colors.red,
-          ),
-        );
-        Navigator.pop(context);
       }
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Kesalahan jaringan: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
-      Navigator.pop(context);
+      print("Error detail donasi: $e");
     }
   }
 
@@ -70,74 +55,87 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? token = prefs.getString('auth_token');
 
-    final response = await http.delete(
-      Uri.parse('${ApiConfig.baseUrl}/donor/foods/${widget.foodId}'),
-      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Batalkan Donasi?"),
+        content: const Text(
+          "Apakah Anda yakin ingin menghapus atau membatalkan donasi makanan ini?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Kembali"),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              setState(() => _isLoading = true);
+
+              final res = await http.delete(
+                Uri.parse(
+                  '${ApiConfig.baseUrl}/donor/foods/${widget.donationId}',
+                ),
+                headers: {
+                  'Authorization': 'Bearer $token',
+                  'Accept': 'application/json',
+                },
+              );
+
+              if (res.statusCode == 200) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Donasi berhasil dibatalkan"),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                Navigator.pop(context, true); // Pulang ke dashboard & refresh
+              }
+            },
+            child: const Text(
+              "Ya, Batalkan",
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
     );
-
-    if (response.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Berhasil dihapus!"),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.pop(context, true);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Gagal menghapus"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  // Helper untuk membaca format Date BSON MongoDB dengan aman
-  String _getSafeDate(dynamic dateData) {
-    if (dateData == null) return DateTime.now().toString();
-    if (dateData is Map && dateData.containsKey('\$date'))
-      return dateData['\$date'];
-    return dateData.toString();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading)
+    if (_isLoading) {
       return const Scaffold(
+        backgroundColor: Colors.white,
         body: Center(
           child: CircularProgressIndicator(color: Color(0xFF2E7D32)),
         ),
       );
-    if (_foodData == null)
-      return const Scaffold(body: Center(child: Text("Data tidak ditemukan")));
-
-    String? fullImageUrl;
-    if (_foodData!['photo_url'] != null && _foodData!['photo_url'] != "") {
-      fullImageUrl =
-          "${ApiConfig.baseUrl.replaceAll('/api', '')}/${_foodData!['photo_url']}";
     }
 
-    // Parsing Tanggal Secara Aman
-    DateTime parsedDate = DateTime.parse(
-      _getSafeDate(_foodData!['collection_date']),
-    ).toLocal();
-    String formattedDate = DateFormat(
-      'EEEE, dd MMM yyyy - HH:mm',
-      'id_ID',
-    ).format(parsedDate);
+    final foodName = _donationData['name'] ?? 'Donasi Makanan';
+    final portion = _donationData['portion']?.toString() ?? '0';
+    final description = _donationData['description'] ?? 'Tidak ada deskripsi.';
+    final status = _donationData['status'] ?? 'pending';
+    final imageUrl = _donationData['photo_url'];
+
+    String? fullImageUrl;
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      fullImageUrl = "${ApiConfig.baseUrl.replaceAll('/api', '')}/$imageUrl";
+    }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF4F6F8),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Detail Donasi",
+          "Detail Donasi Anda",
           style: TextStyle(
             color: Colors.black87,
             fontWeight: FontWeight.w800,
@@ -150,6 +148,7 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // IMAGE CONTAINER
             Container(
               width: double.infinity,
               height: 200,
@@ -164,176 +163,115 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
                         fullImageUrl,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => const Icon(
-                          Icons.fastfood,
+                          Icons.fastfood_rounded,
                           size: 50,
                           color: Colors.grey,
                         ),
                       )
-                    : const Icon(Icons.fastfood, size: 50, color: Colors.grey),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              _foodData!['name'] ?? 'Tanpa Nama',
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F5E9),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                _foodData!['category'] ?? 'Umum',
-                style: const TextStyle(
-                  color: Color(0xFF2E7D32),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            _buildDetailRow(
-              "Jumlah Porsi",
-              "${_foodData!['portion']} Porsi",
-              Icons.restaurant_menu,
-            ),
-            _buildDetailRow(
-              "Waktu Pengambilan",
-              formattedDate,
-              Icons.calendar_month,
-            ),
-            _buildDetailRow(
-              "Catatan",
-              _foodData!['note'] ?? 'Tidak ada catatan',
-              Icons.notes,
-            ),
-            _buildDetailRow(
-              "Status",
-              (_foodData!['status'] ?? 'Unknown').toUpperCase(),
-              Icons.info_outline,
-            ),
-
-            const SizedBox(height: 40),
-
-            if (_foodData!['status'] == 'available')
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        side: const BorderSide(color: Colors.red),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                    : const Icon(
+                        Icons.fastfood_rounded,
+                        size: 50,
+                        color: Colors.grey,
                       ),
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text("Hapus Donasi?"),
-                            content: const Text(
-                              "Data yang dihapus tidak bisa dikembalikan.",
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text("Batal"),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                  _deleteDonation();
-                                },
-                                child: const Text(
-                                  "Hapus",
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                      child: const Text(
-                        "Hapus",
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // INFO CARD
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    foodName,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    "$portion Porsi",
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Divider(height: 24),
+                  const Text(
+                    "Status Donasi",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      status.toUpperCase(),
+                      style: TextStyle(
+                        color: Colors.green.shade800,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2E7D32),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      onPressed: () async {
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                EditDonationPage(foodData: _foodData!),
-                          ),
-                        );
-                        if (result == true) {
-                          setState(() => _isLoading = true);
-                          _fetchDetail();
-                        }
-                      },
-                      child: const Text(
-                        "Edit",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                  const Divider(height: 24),
+                  const Text(
+                    "Deskripsi Makanan",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    description,
+                    style: TextStyle(color: Colors.grey[700], height: 1.5),
                   ),
                 ],
               ),
-          ],
-        ),
-      ),
-    );
-  }
+            ),
 
-  Widget _buildDetailRow(String title, String value, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: Colors.grey, size: 20),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+            const SizedBox(height: 32),
+            if (status == 'pending')
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: OutlinedButton(
+                  onPressed: _deleteDonation,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  child: const Text(
+                    "Batalkan Donasi Ini",
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ],
+              ),
+          ],
+        ),
       ),
     );
   }
