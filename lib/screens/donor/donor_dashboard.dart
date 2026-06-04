@@ -11,6 +11,7 @@ import 'donor_profile_page.dart';
 // Import Halaman Detail & Tambah
 import 'add_donation_page.dart';
 import 'donation_detail_page.dart';
+import 'edit_donation_page.dart';
 import 'yayasan_request_detail_page.dart';
 
 class DonorDashboard extends StatefulWidget {
@@ -24,10 +25,11 @@ class _DonorDashboardState extends State<DonorDashboard> {
   int _selectedIndex = 0;
   bool _isLoading = true;
 
-  // FIX: Inisialisasi dengan nilai default yang aman
   Map<String, dynamic> _summary = {'active': 0, 'completed': 0};
+
   List<dynamic> _activeDonations = [];
   List<dynamic> _yayasanRequests = [];
+
   String _donorName = "Donatur";
 
   @override
@@ -37,82 +39,104 @@ class _DonorDashboardState extends State<DonorDashboard> {
   }
 
   Future<void> _fetchDashboardData() async {
-    // FIX: Set loading true di awal refresh
-    if (!mounted) return;
-    setState(() => _isLoading = true);
-
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? token = prefs.getString('auth_token');
 
     try {
-      // FIX: Jalankan kedua request secara paralel agar lebih cepat
-      final results = await Future.wait([
-        http.get(
-          Uri.parse('${ApiConfig.baseUrl}/donor/dashboard'),
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
-        http.get(
-          Uri.parse('${ApiConfig.baseUrl}/donor/profile'),
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
-      ]);
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/donor/dashboard'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
 
-      final response = results[0];
-      final profileResponse = results[1];
+      final profileResponse = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/donor/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
 
-      if (!mounted) return;
-
-      // FIX: Handle dashboard response dulu, profile terpisah (tidak saling blokir)
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        // FIX: Null safety berlapis — pastikan setiap level tidak null
-        final data = body['data'] as Map<String, dynamic>? ?? {};
+      if (response.statusCode == 200 && profileResponse.statusCode == 200) {
+        final data = jsonDecode(response.body)['data'];
+        final profileData = jsonDecode(profileResponse.body)['data'];
 
         setState(() {
-          _summary =
-              (data['summary'] as Map<String, dynamic>?) ??
-              {'active': 0, 'completed': 0};
-          // FIX: Pakai List.from() agar tidak error kalau null
-          _activeDonations = List.from(data['active_donations'] ?? []);
-          _yayasanRequests = List.from(data['yayasan_requests'] ?? []);
+          _summary = data['summary'];
+          _activeDonations = data['active_donations'] ?? [];
+          _yayasanRequests = data['yayasan_requests'] ?? [];
+          _donorName = profileData['name'] ?? "Donatur";
+          _isLoading = false;
         });
       } else {
-        // FIX: Kalau dashboard gagal, tetap tampilkan halaman (data kosong)
-        debugPrint(
-          'Dashboard error: ${response.statusCode} - ${response.body}',
-        );
-      }
-
-      // FIX: Profile dihandle terpisah, tidak memblokir dashboard
-      if (profileResponse.statusCode == 200) {
-        final profileBody = jsonDecode(profileResponse.body);
-        final profileData = profileBody['data'] as Map<String, dynamic>? ?? {};
-        setState(() {
-          _donorName = profileData['name']?.toString() ?? "Donatur";
-        });
+        setState(() => _isLoading = false);
       }
     } catch (e) {
-      // FIX: Tampilkan error tapi tetap keluar dari loading state
-      debugPrint("Error fetching donor dashboard: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Gagal memuat data. Coba lagi.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } finally {
-      // FIX: SELALU set isLoading = false, apapun yang terjadi
-      if (mounted) setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
+      print("Error fetching donor dashboard: $e");
     }
+  }
+
+  Future<void> _deleteDonation(String donationId) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Hapus Donasi?"),
+        content: const Text(
+          "Apakah Anda yakin ingin menghapus data donasi makanan ini?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Kembali"),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              setState(() => _isLoading = true);
+              SharedPreferences prefs = await SharedPreferences.getInstance();
+              String? token = prefs.getString('auth_token');
+
+              try {
+                final res = await http.delete(
+                  Uri.parse('${ApiConfig.baseUrl}/donor/foods/$donationId'),
+                  headers: {
+                    'Authorization': 'Bearer $token',
+                    'Accept': 'application/json',
+                  },
+                );
+
+                if (res.statusCode == 200) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Donasi berhasil dihapus"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  _fetchDashboardData();
+                } else {
+                  setState(() => _isLoading = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Gagal menghapus donasi"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } catch (e) {
+                setState(() => _isLoading = false);
+              }
+            },
+            child: const Text(
+              "Ya, Hapus",
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _logout() async {
@@ -217,7 +241,10 @@ class _DonorDashboardState extends State<DonorDashboard> {
                         builder: (context) => const AddDonationPage(),
                       ),
                     );
-                    if (result == true) _fetchDashboardData();
+                    if (result == true) {
+                      setState(() => _isLoading = true);
+                      _fetchDashboardData();
+                    }
                   },
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -240,7 +267,9 @@ class _DonorDashboardState extends State<DonorDashboard> {
 
           const SizedBox(height: 28),
 
-          // SECTION: DONASI AKTIF ANDA
+          // ==============================
+          // 1. SECTION: DONASI AKTIF ANDA
+          // ==============================
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -253,7 +282,10 @@ class _DonorDashboardState extends State<DonorDashboard> {
                 ),
               ),
               GestureDetector(
-                onTap: _fetchDashboardData,
+                onTap: () {
+                  setState(() => _isLoading = true);
+                  _fetchDashboardData();
+                },
                 child: const Icon(
                   Icons.refresh_rounded,
                   color: Color(0xFF2E7D32),
@@ -285,21 +317,15 @@ class _DonorDashboardState extends State<DonorDashboard> {
             )
           else
             ..._activeDonations.map((item) {
-              // FIX: Null-safe ID parsing
-              String itemId = '';
-              if (item['_id'] is Map) {
-                itemId = item['_id']['\$oid']?.toString() ?? '';
-              } else {
-                itemId = item['_id']?.toString() ?? '';
-              }
-
+              String itemId = item['_id'] is Map
+                  ? item['_id']['\$oid']
+                  : item['_id'].toString();
               return _buildDonationCard(
-                foodName: item['name']?.toString() ?? 'Donasi',
-                portion: item['portion']?.toString() ?? '0',
-                status: item['status']?.toString() ?? 'available',
-                imageUrl: item['photo_url']?.toString(),
-                onTap: () async {
-                  if (itemId.isEmpty) return;
+                foodName: item['name'] ?? 'Donasi',
+                portion: item['portion'].toString(),
+                status: item['status'] ?? 'pending',
+                imageUrl: item['photo_url'],
+                onDetail: () async {
                   final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -307,14 +333,32 @@ class _DonorDashboardState extends State<DonorDashboard> {
                           DonationDetailPage(donationId: itemId),
                     ),
                   );
-                  if (result == true) _fetchDashboardData();
+                  if (result == true) {
+                    setState(() => _isLoading = true);
+                    _fetchDashboardData();
+                  }
                 },
+                onEdit: () {
+                  // Ganti dengan navigasi ke EditDonationPage jika page sudah siap terima parameter
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        "Fitur Edit akan diarahkan ke EditDonationPage!",
+                      ),
+                      backgroundColor: Colors.blue,
+                    ),
+                  );
+                  // Navigator.push(context, MaterialPageRoute(builder: (context) => EditDonationPage(donationData: item)));
+                },
+                onDelete: () => _deleteDonation(itemId),
               );
             }).toList(),
 
           const SizedBox(height: 12),
 
-          // SECTION: PERMINTAAN YAYASAN
+          // ==============================
+          // 2. SECTION: PERMINTAAN YAYASAN
+          // ==============================
           const Text(
             "Permintaan Yayasan",
             style: TextStyle(
@@ -354,15 +398,11 @@ class _DonorDashboardState extends State<DonorDashboard> {
             )
           else
             ..._yayasanRequests.map((item) {
-              // FIX: Null-safe parsing untuk semua field
-              String receiverName = "Yayasan Tidak Diketahui";
-              if (item['receiver'] != null &&
-                  item['receiver']['name'] != null) {
-                receiverName = item['receiver']['name'].toString();
-              }
+              String receiverName = item['receiver'] != null
+                  ? item['receiver']['name']
+                  : "Yayasan Tidak Diketahui";
               String portion = item['portion']?.toString() ?? '0';
-              String foodName =
-                  item['name']?.toString() ?? 'Permintaan Makanan';
+              String foodName = item['name'] ?? 'Permintaan Makanan';
 
               return _buildRequestCard(
                 yayasanName: receiverName,
@@ -376,7 +416,10 @@ class _DonorDashboardState extends State<DonorDashboard> {
                           YayasanRequestDetailPage(requestData: item),
                     ),
                   );
-                  if (result == true) _fetchDashboardData();
+                  if (result == true) {
+                    setState(() => _isLoading = true);
+                    _fetchDashboardData();
+                  }
                 },
               );
             }).toList(),
@@ -475,12 +518,15 @@ class _DonorDashboardState extends State<DonorDashboard> {
     );
   }
 
+  // WIDGET CARD DONASI AKTIF (Dengan Action Buttons)
   Widget _buildDonationCard({
     required String foodName,
     required String portion,
     required String status,
     String? imageUrl,
-    required VoidCallback onTap,
+    required VoidCallback onDetail,
+    required VoidCallback onEdit,
+    required VoidCallback onDelete,
   }) {
     String? fullImageUrl;
     if (imageUrl != null && imageUrl.isNotEmpty) {
@@ -501,93 +547,165 @@ class _DonorDashboardState extends State<DonorDashboard> {
       statusText = "Diperjalanan";
     }
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: Colors.green[50],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: fullImageUrl != null
-                    ? Image.network(
-                        fullImageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(
-                          Icons.fastfood_rounded,
-                          color: Colors.green,
-                        ),
-                      )
-                    : const Icon(Icons.fastfood_rounded, color: Colors.green),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    foodName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: Colors.black87,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "$portion Porsi",
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                statusText,
-                style: TextStyle(
-                  color: statusColor,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 55,
+                height: 55,
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: fullImageUrl != null
+                      ? Image.network(
+                          fullImageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.fastfood_rounded,
+                            color: Colors.green,
+                          ),
+                        )
+                      : const Icon(Icons.fastfood_rounded, color: Colors.green),
                 ),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      foodName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "$portion Porsi",
+                      style: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: Color(0xFFEEEEEE)),
+          const SizedBox(height: 16),
+          // Barisan Tombol Aksi
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2E7D32),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: onDetail,
+                  child: const Text(
+                    "Detail",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 1,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.blue),
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: onEdit,
+                  child: const Icon(
+                    Icons.edit_rounded,
+                    color: Colors.blue,
+                    size: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 1,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.red.shade300),
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: onDelete,
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.red.shade400,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
+  // WIDGET CARD REQUEST YAYASAN
   Widget _buildRequestCard({
     required String yayasanName,
     required String foodName,

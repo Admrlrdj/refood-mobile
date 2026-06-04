@@ -52,15 +52,12 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
   }
 
   Future<void> _deleteDonation() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('auth_token');
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Batalkan Donasi?"),
         content: const Text(
-          "Apakah Anda yakin ingin menghapus atau membatalkan donasi makanan ini?",
+          "Apakah Anda yakin ingin membatalkan/menghapus donasi makanan ini?",
         ),
         actions: [
           TextButton(
@@ -72,24 +69,39 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
               Navigator.pop(context);
               setState(() => _isLoading = true);
 
-              final res = await http.delete(
-                Uri.parse(
-                  '${ApiConfig.baseUrl}/donor/foods/${widget.donationId}',
-                ),
-                headers: {
-                  'Authorization': 'Bearer $token',
-                  'Accept': 'application/json',
-                },
-              );
+              SharedPreferences prefs = await SharedPreferences.getInstance();
+              String? token = prefs.getString('auth_token');
 
-              if (res.statusCode == 200) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Donasi berhasil dibatalkan"),
-                    backgroundColor: Colors.red,
+              try {
+                final res = await http.delete(
+                  Uri.parse(
+                    '${ApiConfig.baseUrl}/donor/foods/${widget.donationId}',
                   ),
+                  headers: {
+                    'Authorization': 'Bearer $token',
+                    'Accept': 'application/json',
+                  },
                 );
-                Navigator.pop(context, true); // Pulang ke dashboard & refresh
+
+                if (res.statusCode == 200) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Donasi berhasil dibatalkan"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  Navigator.pop(context, true); // Pulang ke dashboard & refresh
+                } else {
+                  setState(() => _isLoading = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Gagal membatalkan donasi"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } catch (e) {
+                setState(() => _isLoading = false);
               }
             },
             child: const Text(
@@ -113,14 +125,46 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
       );
     }
 
-    final foodName = _donationData['name'] ?? 'Donasi Makanan';
-    final portion = _donationData['portion']?.toString() ?? '0';
-    final description = _donationData['description'] ?? 'Tidak ada deskripsi.';
-    final status = _donationData['status'] ?? 'pending';
-    final imageUrl = _donationData['photo_url'];
+    // ==========================================
+    // DATA SESUAI COLLECTION MONGODB (NO DUMMY)
+    // ==========================================
+    final foodName = _donationData['name']?.toString() ?? '-';
+    final portion = _donationData['portion']?.toString() ?? '-';
+    final note = _donationData['note']?.toString() ?? '-';
+    final category = _donationData['category']?.toString() ?? '-';
+    final status = _donationData['status']?.toString() ?? 'available';
 
+    String collectionDateStr = "-";
+    var rawDate = _donationData['collection_date'];
+
+    if (rawDate != null) {
+      try {
+        DateTime parsedDate;
+        // Cek jika formatnya Map {"$date": "..."}
+        if (rawDate is Map && rawDate.containsKey('\$date')) {
+          parsedDate = DateTime.parse(rawDate['\$date'].toString()).toLocal();
+        }
+        // Jika formatnya sudah berupa String ISO
+        else {
+          parsedDate = DateTime.parse(rawDate.toString()).toLocal();
+        }
+
+        // Format ke tampilan yang rapi: DD-MM-YYYY HH:mm
+        String day = parsedDate.day.toString().padLeft(2, '0');
+        String month = parsedDate.month.toString().padLeft(2, '0');
+        String year = parsedDate.year.toString();
+        String hour = parsedDate.hour.toString().padLeft(2, '0');
+        String minute = parsedDate.minute.toString().padLeft(2, '0');
+
+        collectionDateStr = "$day-$month-$year $hour:$minute";
+      } catch (e) {
+        collectionDateStr = rawDate.toString();
+      }
+    }
+
+    final imageUrl = _donationData['photo_url'];
     String? fullImageUrl;
-    if (imageUrl != null && imageUrl.isNotEmpty) {
+    if (imageUrl != null && imageUrl.toString().isNotEmpty) {
       fullImageUrl = "${ApiConfig.baseUrl.replaceAll('/api', '')}/$imageUrl";
     }
 
@@ -143,41 +187,127 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
           ),
         ),
       ),
+
+      // TOMBOL BATALKAN DI BAWAH JIKA STATUS MASIH MENUNGGU
+      bottomNavigationBar:
+          (status == 'available' ||
+              status == 'waiting_donor' ||
+              status == 'pending')
+          ? Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -5),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  onPressed: _isLoading ? null : _deleteDonation,
+                  child: const Text(
+                    "Batalkan Donasi Ini",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : null,
+
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
+        physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // IMAGE CONTAINER
+            // CARD 1: INFO STATUS UTAMA
             Container(
-              width: double.infinity,
-              height: 200,
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.grey[200],
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.green.shade100),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: fullImageUrl != null
-                    ? Image.network(
-                        fullImageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(
-                          Icons.fastfood_rounded,
-                          size: 50,
-                          color: Colors.grey,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE8F5E9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.volunteer_activism_rounded,
+                      color: Color(0xFF2E7D32),
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          foodName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.black87,
+                          ),
                         ),
-                      )
-                    : const Icon(
-                        Icons.fastfood_rounded,
-                        size: 50,
-                        color: Colors.grey,
-                      ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline_rounded,
+                              size: 14,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              "Status: ${status.toUpperCase()}",
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 24),
 
-            // INFO CARD
+            const Text(
+              "Detail Kebutuhan",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // CARD 2: DETAIL SPESIFIK MAKANAN
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -186,93 +316,144 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
                 border: Border.all(color: Colors.grey.shade200),
               ),
               child: Column(
+                children: [
+                  _buildDetailRow("Kategori", category),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Divider(),
+                  ),
+                  _buildDetailRow("Jumlah Porsi", "$portion Porsi"),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Divider(),
+                  ),
+                  _buildDetailRow("Catatan Khusus", note, isLong: true),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            const Text(
+              "Waktu Pengambilan",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // CARD 3: WAKTU / TANGGAL
+            Container(
+              padding: const EdgeInsets.all(20),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    foodName,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    "$portion Porsi",
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Divider(height: 24),
-                  const Text(
-                    "Status Donasi",
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      status.toUpperCase(),
-                      style: TextStyle(
-                        color: Colors.green.shade800,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.access_time_rounded,
+                        color: Colors.orange,
+                        size: 20,
                       ),
-                    ),
-                  ),
-                  const Divider(height: 24),
-                  const Text(
-                    "Deskripsi Makanan",
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                      const SizedBox(width: 8),
+                      const Text(
+                        "Batas Waktu Pengambilan",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    description,
-                    style: TextStyle(color: Colors.grey[700], height: 1.5),
+                    collectionDateStr,
+                    style: TextStyle(
+                      color: Colors.grey[700],
+                      height: 1.5,
+                      fontSize: 13,
+                    ),
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 24),
 
-            const SizedBox(height: 32),
-            if (status == 'available' || status == 'waiting_donor')
-              SizedBox(
+            // GAMBAR MAKANAN (Hanya muncul jika URL tidak kosong/null)
+            if (fullImageUrl != null) ...[
+              const Text(
+                "Foto Dokumentasi",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
                 width: double.infinity,
-                height: 50,
-                child: OutlinedButton(
-                  onPressed: _deleteDonation,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.red),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: const Text(
-                    "Batalkan Donasi Ini",
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+                height: 200,
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.network(
+                    fullImageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.broken_image_rounded,
+                      size: 50,
+                      color: Colors.grey,
                     ),
                   ),
                 ),
               ),
+            ],
+
+            const SizedBox(height: 20),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, {bool isLong = false}) {
+    return Row(
+      crossAxisAlignment: isLong
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.grey,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
