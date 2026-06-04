@@ -248,7 +248,7 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
             ),
 
             const SizedBox(height: 32),
-            if (status == 'pending')
+            if (status == 'available' || status == 'waiting_donor')
               SizedBox(
                 width: double.infinity,
                 height: 50,

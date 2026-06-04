@@ -449,6 +449,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
   }
 
   // WIDGET CARD DONASI AKTIF (MILIK DONATUR)
+  // WIDGET CARD DONASI AKTIF (MILIK DONATUR)
   Widget _buildDonationCard({
     required String foodName,
     required String portion,
@@ -461,10 +462,14 @@ class _DonorDashboardState extends State<DonorDashboard> {
       fullImageUrl = "${ApiConfig.baseUrl.replaceAll('/api', '')}/$imageUrl";
     }
 
-    // Penentuan Warna Status
+    // Penentuan Warna Status (Disesuaikan dengan status MongoDB)
     Color statusColor = Colors.orange;
     String statusText = "Menunggu";
-    if (status == 'accepted') {
+
+    if (status == 'available' || status == 'waiting_donor') {
+      statusColor = Colors.orange;
+      statusText = "Menunggu";
+    } else if (status == 'accepted') {
       statusColor = Colors.blue;
       statusText = "Akan Dijemput";
     } else if (status == 'on_delivery') {
