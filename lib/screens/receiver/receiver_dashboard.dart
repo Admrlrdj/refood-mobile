@@ -442,7 +442,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Halo, $_receiverName 👋",
+                    "Halo, $_receiverName",
                     style: const TextStyle(
                       color: Colors.black87,
                       fontSize: 18,
