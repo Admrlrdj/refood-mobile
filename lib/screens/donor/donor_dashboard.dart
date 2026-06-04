@@ -317,15 +317,36 @@ class _DonorDashboardState extends State<DonorDashboard> {
             )
           else
             ..._activeDonations.map((item) {
-              String itemId = item['_id'] is Map
-                  ? item['_id']['\$oid']
-                  : item['_id'].toString();
+              // ====================================================
+              // FIX: PARSING ID YANG KEBAL MONGODB (id atau _id)
+              // ====================================================
+              var rawId = item['id'] ?? item['_id'];
+              String itemId = '';
+              if (rawId != null) {
+                if (rawId is Map && rawId.containsKey('\$oid')) {
+                  itemId = rawId['\$oid'].toString();
+                } else {
+                  itemId = rawId.toString();
+                }
+              }
+
               return _buildDonationCard(
-                foodName: item['name'] ?? 'Donasi',
-                portion: item['portion'].toString(),
-                status: item['status'] ?? 'pending',
-                imageUrl: item['photo_url'],
+                foodName: item['name']?.toString() ?? 'Donasi',
+                portion: item['portion']?.toString() ?? '0',
+                status: item['status']?.toString() ?? 'pending',
+                imageUrl: item['photo_url']?.toString(),
                 onDetail: () async {
+                  if (itemId.isEmpty || itemId == 'null') {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          "ID Makanan tidak valid, coba refresh halaman",
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
                   final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -339,7 +360,6 @@ class _DonorDashboardState extends State<DonorDashboard> {
                   }
                 },
                 onEdit: () {
-                  // Ganti dengan navigasi ke EditDonationPage jika page sudah siap terima parameter
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text(
@@ -536,7 +556,9 @@ class _DonorDashboardState extends State<DonorDashboard> {
     Color statusColor = Colors.orange;
     String statusText = "Menunggu";
 
-    if (status == 'available' || status == 'waiting_donor') {
+    if (status == 'available' ||
+        status == 'waiting_donor' ||
+        status == 'pending') {
       statusColor = Colors.orange;
       statusText = "Menunggu";
     } else if (status == 'accepted') {
