@@ -30,7 +30,8 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
   };
 
   List<dynamic> _incomingFoods = [];
-  List<dynamic> _recentRequests = [];
+  // List<dynamic> _recentRequests = [];
+  List<dynamic> _activeRequests = [];
   String _receiverName = "Yayasan";
 
   @override
@@ -71,23 +72,36 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
       if (!mounted) return;
 
       // FIX: Handle dashboard response dengan null safety berlapis
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        final data = body['data'] as Map<String, dynamic>? ?? {};
+      if (response.statusCode == 200 && profileResponse.statusCode == 200) {
+        final data = jsonDecode(response.body)['data'];
+        final profileData = jsonDecode(profileResponse.body)['data'];
 
         setState(() {
-          // FIX: Null-safe summary — kalau key tidak ada, pakai default 0
-          final rawSummary = data['summary'] as Map<String, dynamic>? ?? {};
-          _summary = {
-            'received': rawSummary['received'] ?? 0,
-            'on_delivery': rawSummary['on_delivery'] ?? 0,
-            'requests': rawSummary['requests'] ?? 0,
-          };
+          // PASTIKAN KEY JSON INI SAMA
+          _incomingFoods = data['incoming_foods'] ?? [];
+          _activeRequests = data['active_requests'] ?? [];
+          _receiverName = profileData['name'] ?? "Yayasan";
 
-          // FIX: Pakai List.from() agar tidak crash kalau null
-          _incomingFoods = List.from(data['incoming_foods'] ?? []);
-          // FIX: Key sudah diperbaiki di backend menjadi 'recent_requests'
-          _recentRequests = List.from(data['recent_requests'] ?? []);
+          if (data['summary'] != null) {
+            _summary = data['summary'];
+          } else {
+            // (Opsional) Hitung manual jika backend belum mengirim object 'summary'
+            _summary = {
+              'received': _incomingFoods
+                  .where((e) => e['status'] == 'completed')
+                  .length,
+              'on_delivery': _incomingFoods
+                  .where(
+                    (e) =>
+                        e['status'] == 'on_delivery' ||
+                        e['status'] == 'accepted',
+                  )
+                  .length,
+              'requests': _activeRequests.length,
+            };
+          }
+          
+          _isLoading = false;
         });
       } else {
         debugPrint(
@@ -455,7 +469,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
           ),
           const SizedBox(height: 16),
 
-          if (_recentRequests.isEmpty)
+          if (_activeRequests.isEmpty) // <-- UBAH DI SINI
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -472,7 +486,8 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
               ),
             )
           else
-            ..._recentRequests.map((item) {
+            ..._activeRequests.map((item) {
+              // <-- UBAH DI SINI JUGA
               var statusInfo = _getStatusUI(
                 item['status']?.toString() ?? 'waiting_donor',
               );
