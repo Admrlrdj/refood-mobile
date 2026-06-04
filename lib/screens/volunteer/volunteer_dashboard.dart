@@ -618,10 +618,6 @@ final List<Widget> pages = [
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              // ==========================================
-              // DI SINI TEMPATNYA!
-              // Menggantikan pesan "sedang dikembangkan"
-              // ==========================================
               onPressed: () => _acceptJob(jobId), 
               child: const Text(
                 "Ambil Tugas Ini",
