@@ -1,0 +1,24 @@
+{
+  "type": "Compass Connections",
+  "version": {
+    "$numberInt": "1"
+  },
+  "connections": [
+    {
+      "id": "574a4012-c382-433e-89cf-50cd2a829b6c",
+      "lastUsed": {
+        "$date": {
+          "$numberLong": "1780419545239"
+        }
+      },
+      "favorite": {
+        "name": "ReFood"
+      },
+      "savedConnectionType": "recent",
+      "connectionOptions": {
+        "connectionString": "mongodb+srv://refood_user@cluster0.q276znv.mongodb.net/",
+        "oidc": {}
+      }
+    }
+  ]
+}

@@ -22,14 +22,15 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
   int _selectedIndex = 0;
   bool _isLoading = true;
 
+  // FIX: Inisialisasi dengan nilai default yang aman
   Map<String, dynamic> _summary = {
     'received': 0,
     'on_delivery': 0,
     'requests': 0,
   };
 
-  List<dynamic> _incomingFoods = []; // Dari Donatur
-  List<dynamic> _recentRequests = []; // Dari Receiver
+  List<dynamic> _incomingFoods = [];
+  List<dynamic> _recentRequests = [];
   String _receiverName = "Yayasan";
 
   @override
@@ -39,43 +40,83 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
   }
 
   Future<void> _fetchDashboardData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? token = prefs.getString('auth_token');
 
     try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/receiver/dashboard'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
+      // FIX: Jalankan secara paralel
+      final results = await Future.wait([
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/receiver/dashboard'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/receiver/profile'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      ]);
 
-      final profileResponse = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/receiver/profile'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
+      final response = results[0];
+      final profileResponse = results[1];
 
-      if (response.statusCode == 200 && profileResponse.statusCode == 200) {
-        final data = jsonDecode(response.body)['data'];
-        final profileData = jsonDecode(profileResponse.body)['data'];
+      if (!mounted) return;
+
+      // FIX: Handle dashboard response dengan null safety berlapis
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final data = body['data'] as Map<String, dynamic>? ?? {};
 
         setState(() {
-          _summary = data['summary'];
-          _incomingFoods = data['incoming_foods'];
-          _recentRequests = data['recent_requests'];
-          _receiverName = profileData['name'] ?? "Yayasan";
-          _isLoading = false;
+          // FIX: Null-safe summary — kalau key tidak ada, pakai default 0
+          final rawSummary = data['summary'] as Map<String, dynamic>? ?? {};
+          _summary = {
+            'received': rawSummary['received'] ?? 0,
+            'on_delivery': rawSummary['on_delivery'] ?? 0,
+            'requests': rawSummary['requests'] ?? 0,
+          };
+
+          // FIX: Pakai List.from() agar tidak crash kalau null
+          _incomingFoods = List.from(data['incoming_foods'] ?? []);
+          // FIX: Key sudah diperbaiki di backend menjadi 'recent_requests'
+          _recentRequests = List.from(data['recent_requests'] ?? []);
+        });
+      } else {
+        debugPrint(
+          'Dashboard error: ${response.statusCode} - ${response.body}',
+        );
+      }
+
+      // FIX: Profile dihandle terpisah, tidak memblokir data dashboard
+      if (profileResponse.statusCode == 200) {
+        final profileBody = jsonDecode(profileResponse.body);
+        final profileData = profileBody['data'] as Map<String, dynamic>? ?? {};
+        setState(() {
+          _receiverName = profileData['name']?.toString() ?? "Yayasan";
         });
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      print("Error fetching dashboard: $e");
+      debugPrint("Error fetching receiver dashboard: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gagal memuat data. Coba lagi.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      // FIX: SELALU set isLoading = false apapun yang terjadi
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -89,7 +130,6 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
     );
   }
 
-  // Translasi status untuk UI Penerima
   Map<String, dynamic> _getStatusUI(String status) {
     switch (status) {
       case 'available':
@@ -124,7 +164,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ================= BANNER UTAMA =================
+          // BANNER UTAMA
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -164,7 +204,6 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                   ),
                 ),
                 const SizedBox(height: 24),
-
                 Row(
                   children: [
                     Expanded(
@@ -223,7 +262,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                               builder: (context) => const RequestFoodPage(),
                             ),
                           );
-                          _fetchDashboardData(); // Refresh setelah request
+                          _fetchDashboardData();
                         },
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -248,20 +287,35 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
           ),
 
           const SizedBox(height: 28),
-          const Text(
-            "Ringkasan Penerimaan",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Colors.black87,
-            ),
+
+          // RINGKASAN PENERIMAAN
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Ringkasan Penerimaan",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black87,
+                ),
+              ),
+              GestureDetector(
+                onTap: _fetchDashboardData,
+                child: const Icon(
+                  Icons.refresh_rounded,
+                  color: Color(0xFF0F766E),
+                  size: 22,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 
           Row(
             children: [
               _buildSummaryCard(
-                count: _summary['received'].toString(),
+                count: (_summary['received'] ?? 0).toString(),
                 label: "Diterima",
                 gradientColors: [
                   const Color(0xFF4ADE80),
@@ -270,7 +324,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
               ),
               const SizedBox(width: 12),
               _buildSummaryCard(
-                count: _summary['on_delivery'].toString(),
+                count: (_summary['on_delivery'] ?? 0).toString(),
                 label: "Diperjalanan",
                 gradientColors: [
                   const Color(0xFF60A5FA),
@@ -279,7 +333,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
               ),
               const SizedBox(width: 12),
               _buildSummaryCard(
-                count: _summary['requests'].toString(),
+                count: (_summary['requests'] ?? 0).toString(),
                 label: "Request",
                 gradientColors: [
                   const Color(0xFFFB923C),
@@ -291,11 +345,11 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
 
           const SizedBox(height: 32),
 
-          // ================= MAKANAN MASUK TERKINI (DARI DONATUR) =================
-          const Row(
+          // MAKANAN MASUK TERKINI
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 "Makanan Masuk Terkini",
                 style: TextStyle(
                   fontSize: 18,
@@ -303,12 +357,20 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
                   color: Colors.black87,
                 ),
               ),
-              Text(
-                "Lihat Semua",
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF2EA275),
+              GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SearchFoodPage(),
+                  ),
+                ),
+                child: const Text(
+                  "Lihat Semua",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF2EA275),
+                  ),
                 ),
               ),
             ],
@@ -316,44 +378,60 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
           const SizedBox(height: 16),
 
           if (_incomingFoods.isEmpty)
-            const Text(
-              "Belum ada donasi makanan terbaru di sekitar Anda.",
-              style: TextStyle(color: Colors.grey),
-            ),
-
-          ..._incomingFoods.map((item) {
-            var statusInfo = _getStatusUI(item['status']);
-            // Mengambil ID
-            String itemId = item['_id'] is Map
-                ? item['_id']['\$oid']
-                : item['_id'].toString();
-
-            return GestureDetector(
-              onTap: () async {
-                // Menghubungkan ke detail makanan masuk (Donasi)
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        IncomingFoodDetailPage(foodId: itemId),
-                  ),
-                );
-                if (result == true) _fetchDashboardData();
-              },
-              child: _buildActivityCard(
-                title: item['name'],
-                status: statusInfo['text'],
-                portion: "${item['portion']} Porsi",
-                statusColor: statusInfo['color'],
-                icon: Icons.fastfood_rounded,
-                imageUrl: item['photo_url'],
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(16),
               ),
-            );
-          }).toList(),
+              child: const Center(
+                child: Text(
+                  "Belum ada donasi makanan terbaru di sekitar Anda.",
+                  style: TextStyle(color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          else
+            ..._incomingFoods.map((item) {
+              var statusInfo = _getStatusUI(
+                item['status']?.toString() ?? 'available',
+              );
+              // FIX: Null-safe ID parsing
+              String itemId = '';
+              if (item['_id'] is Map) {
+                itemId = item['_id']['\$oid']?.toString() ?? '';
+              } else {
+                itemId = item['_id']?.toString() ?? '';
+              }
+
+              return GestureDetector(
+                onTap: () async {
+                  if (itemId.isEmpty) return;
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          IncomingFoodDetailPage(foodId: itemId),
+                    ),
+                  );
+                  if (result == true) _fetchDashboardData();
+                },
+                child: _buildActivityCard(
+                  title: item['name']?.toString() ?? 'Makanan',
+                  status: statusInfo['text'],
+                  portion: "${item['portion'] ?? '0'} Porsi",
+                  statusColor: statusInfo['color'],
+                  icon: Icons.fastfood_rounded,
+                  imageUrl: item['photo_url']?.toString(),
+                ),
+              );
+            }).toList(),
 
           const SizedBox(height: 32),
 
-          // ================= AKTIVITAS REQUEST MAKANAN (DARI RECEIVER) =================
+          // AKTIVITAS REQUEST MAKANAN
           const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -378,39 +456,56 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
           const SizedBox(height: 16),
 
           if (_recentRequests.isEmpty)
-            const Text(
-              "Anda belum mengajukan request makanan apapun.",
-              style: TextStyle(color: Colors.grey),
-            ),
-
-          ..._recentRequests.map((item) {
-            var statusInfo = _getStatusUI(item['status']);
-            // Mengambil ID
-            String itemId = item['_id'] is Map
-                ? item['_id']['\$oid']
-                : item['_id'].toString();
-
-            return GestureDetector(
-              onTap: () async {
-                // Menghubungkan ke detail request (Kebutuhan Sendiri)
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => RequestFoodDetailPage(foodId: itemId),
-                  ),
-                );
-                if (result == true) _fetchDashboardData();
-              },
-              child: _buildActivityCard(
-                title: item['name'],
-                status: statusInfo['text'],
-                portion: "${item['portion']} Porsi",
-                statusColor: statusInfo['color'],
-                icon: Icons.campaign_rounded,
-                imageUrl: item['photo_url'],
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(16),
               ),
-            );
-          }).toList(),
+              child: const Center(
+                child: Text(
+                  "Anda belum mengajukan request makanan apapun.",
+                  style: TextStyle(color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          else
+            ..._recentRequests.map((item) {
+              var statusInfo = _getStatusUI(
+                item['status']?.toString() ?? 'waiting_donor',
+              );
+              // FIX: Null-safe ID parsing
+              String itemId = '';
+              if (item['_id'] is Map) {
+                itemId = item['_id']['\$oid']?.toString() ?? '';
+              } else {
+                itemId = item['_id']?.toString() ?? '';
+              }
+
+              return GestureDetector(
+                onTap: () async {
+                  if (itemId.isEmpty) return;
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          RequestFoodDetailPage(foodId: itemId),
+                    ),
+                  );
+                  if (result == true) _fetchDashboardData();
+                },
+                child: _buildActivityCard(
+                  title: item['name']?.toString() ?? 'Request',
+                  status: statusInfo['text'],
+                  portion: "${item['portion'] ?? '0'} Porsi",
+                  statusColor: statusInfo['color'],
+                  icon: Icons.campaign_rounded,
+                  imageUrl: item['photo_url']?.toString(),
+                ),
+              );
+            }).toList(),
 
           const SizedBox(height: 20),
         ],
@@ -488,9 +583,7 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
           unselectedItemColor: Colors.grey[400],
           type: BottomNavigationBarType.fixed,
           elevation: 0,
-          onTap: (index) => setState(() {
-            _selectedIndex = index;
-          }),
+          onTap: (index) => setState(() => _selectedIndex = index),
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.home_rounded),
@@ -562,7 +655,6 @@ class _ReceiverDashboardState extends State<ReceiverDashboard> {
     );
   }
 
-  // WIDGET KARTU AKTIVITAS DENGAN GAMBAR (Mirip Donatur)
   Widget _buildActivityCard({
     required String title,
     required String status,

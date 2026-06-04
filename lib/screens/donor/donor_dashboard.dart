@@ -24,12 +24,10 @@ class _DonorDashboardState extends State<DonorDashboard> {
   int _selectedIndex = 0;
   bool _isLoading = true;
 
+  // FIX: Inisialisasi dengan nilai default yang aman
   Map<String, dynamic> _summary = {'active': 0, 'completed': 0};
-
-  // Dua List Berbeda
   List<dynamic> _activeDonations = [];
   List<dynamic> _yayasanRequests = [];
-
   String _donorName = "Donatur";
 
   @override
@@ -39,43 +37,81 @@ class _DonorDashboardState extends State<DonorDashboard> {
   }
 
   Future<void> _fetchDashboardData() async {
+    // FIX: Set loading true di awal refresh
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? token = prefs.getString('auth_token');
 
     try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/donor/dashboard'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
+      // FIX: Jalankan kedua request secara paralel agar lebih cepat
+      final results = await Future.wait([
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/donor/dashboard'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/donor/profile'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      ]);
 
-      final profileResponse = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/donor/profile'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
+      final response = results[0];
+      final profileResponse = results[1];
 
-      if (response.statusCode == 200 && profileResponse.statusCode == 200) {
-        final data = jsonDecode(response.body)['data'];
-        final profileData = jsonDecode(profileResponse.body)['data'];
+      if (!mounted) return;
+
+      // FIX: Handle dashboard response dulu, profile terpisah (tidak saling blokir)
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        // FIX: Null safety berlapis — pastikan setiap level tidak null
+        final data = body['data'] as Map<String, dynamic>? ?? {};
 
         setState(() {
-          _summary = data['summary'];
-          _activeDonations = data['active_donations'] ?? [];
-          _yayasanRequests = data['yayasan_requests'] ?? [];
-          _donorName = profileData['name'] ?? "Donatur";
-          _isLoading = false;
+          _summary =
+              (data['summary'] as Map<String, dynamic>?) ??
+              {'active': 0, 'completed': 0};
+          // FIX: Pakai List.from() agar tidak error kalau null
+          _activeDonations = List.from(data['active_donations'] ?? []);
+          _yayasanRequests = List.from(data['yayasan_requests'] ?? []);
         });
       } else {
-        setState(() => _isLoading = false);
+        // FIX: Kalau dashboard gagal, tetap tampilkan halaman (data kosong)
+        debugPrint(
+          'Dashboard error: ${response.statusCode} - ${response.body}',
+        );
+      }
+
+      // FIX: Profile dihandle terpisah, tidak memblokir dashboard
+      if (profileResponse.statusCode == 200) {
+        final profileBody = jsonDecode(profileResponse.body);
+        final profileData = profileBody['data'] as Map<String, dynamic>? ?? {};
+        setState(() {
+          _donorName = profileData['name']?.toString() ?? "Donatur";
+        });
       }
     } catch (e) {
-      setState(() => _isLoading = false);
-      print("Error fetching donor dashboard: $e");
+      // FIX: Tampilkan error tapi tetap keluar dari loading state
+      debugPrint("Error fetching donor dashboard: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gagal memuat data. Coba lagi.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      // FIX: SELALU set isLoading = false, apapun yang terjadi
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -175,17 +211,13 @@ class _DonorDashboardState extends State<DonorDashboard> {
                     ),
                   ),
                   onPressed: () async {
-                    // Tombol Tambah Donasi
                     final result = await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const AddDonationPage(),
                       ),
                     );
-                    if (result == true) {
-                      setState(() => _isLoading = true);
-                      _fetchDashboardData();
-                    }
+                    if (result == true) _fetchDashboardData();
                   },
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -208,9 +240,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
 
           const SizedBox(height: 28),
 
-          // ==============================
-          // 1. SECTION: DONASI AKTIF ANDA
-          // ==============================
+          // SECTION: DONASI AKTIF ANDA
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -223,10 +253,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
                 ),
               ),
               GestureDetector(
-                onTap: () {
-                  setState(() => _isLoading = true);
-                  _fetchDashboardData();
-                },
+                onTap: _fetchDashboardData,
                 child: const Icon(
                   Icons.refresh_rounded,
                   color: Color(0xFF2E7D32),
@@ -258,16 +285,21 @@ class _DonorDashboardState extends State<DonorDashboard> {
             )
           else
             ..._activeDonations.map((item) {
-              String itemId = item['_id'] is Map
-                  ? item['_id']['\$oid']
-                  : item['_id'].toString();
+              // FIX: Null-safe ID parsing
+              String itemId = '';
+              if (item['_id'] is Map) {
+                itemId = item['_id']['\$oid']?.toString() ?? '';
+              } else {
+                itemId = item['_id']?.toString() ?? '';
+              }
+
               return _buildDonationCard(
-                foodName: item['name'] ?? 'Donasi',
-                portion: item['portion'].toString(),
-                status: item['status'] ?? 'pending',
-                imageUrl: item['photo_url'],
+                foodName: item['name']?.toString() ?? 'Donasi',
+                portion: item['portion']?.toString() ?? '0',
+                status: item['status']?.toString() ?? 'available',
+                imageUrl: item['photo_url']?.toString(),
                 onTap: () async {
-                  // MASUK KE DETAIL DONASI (BISA EDIT/HAPUS)
+                  if (itemId.isEmpty) return;
                   final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -275,19 +307,14 @@ class _DonorDashboardState extends State<DonorDashboard> {
                           DonationDetailPage(donationId: itemId),
                     ),
                   );
-                  if (result == true) {
-                    setState(() => _isLoading = true);
-                    _fetchDashboardData();
-                  }
+                  if (result == true) _fetchDashboardData();
                 },
               );
             }).toList(),
 
           const SizedBox(height: 12),
 
-          // ==============================
-          // 2. SECTION: PERMINTAAN YAYASAN
-          // ==============================
+          // SECTION: PERMINTAAN YAYASAN
           const Text(
             "Permintaan Yayasan",
             style: TextStyle(
@@ -327,18 +354,21 @@ class _DonorDashboardState extends State<DonorDashboard> {
             )
           else
             ..._yayasanRequests.map((item) {
-              String receiverName = item['receiver'] != null
-                  ? item['receiver']['name']
-                  : "Yayasan Tidak Diketahui";
+              // FIX: Null-safe parsing untuk semua field
+              String receiverName = "Yayasan Tidak Diketahui";
+              if (item['receiver'] != null &&
+                  item['receiver']['name'] != null) {
+                receiverName = item['receiver']['name'].toString();
+              }
               String portion = item['portion']?.toString() ?? '0';
-              String foodName = item['name'] ?? 'Permintaan Makanan';
+              String foodName =
+                  item['name']?.toString() ?? 'Permintaan Makanan';
 
               return _buildRequestCard(
                 yayasanName: receiverName,
                 foodName: foodName,
                 portion: portion,
                 onTap: () async {
-                  // MASUK KE DETAIL REQUEST YAYASAN
                   final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -346,10 +376,7 @@ class _DonorDashboardState extends State<DonorDashboard> {
                           YayasanRequestDetailPage(requestData: item),
                     ),
                   );
-                  if (result == true) {
-                    setState(() => _isLoading = true);
-                    _fetchDashboardData();
-                  }
+                  if (result == true) _fetchDashboardData();
                 },
               );
             }).toList(),
@@ -448,8 +475,6 @@ class _DonorDashboardState extends State<DonorDashboard> {
     );
   }
 
-  // WIDGET CARD DONASI AKTIF (MILIK DONATUR)
-  // WIDGET CARD DONASI AKTIF (MILIK DONATUR)
   Widget _buildDonationCard({
     required String foodName,
     required String portion,
@@ -462,7 +487,6 @@ class _DonorDashboardState extends State<DonorDashboard> {
       fullImageUrl = "${ApiConfig.baseUrl.replaceAll('/api', '')}/$imageUrl";
     }
 
-    // Penentuan Warna Status (Disesuaikan dengan status MongoDB)
     Color statusColor = Colors.orange;
     String statusText = "Menunggu";
 
@@ -564,7 +588,6 @@ class _DonorDashboardState extends State<DonorDashboard> {
     );
   }
 
-  // WIDGET CARD REQUEST YAYASAN
   Widget _buildRequestCard({
     required String yayasanName,
     required String foodName,
