@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api_config.dart';
 import 'register_page.dart';
 import 'register_receiver_page.dart';
+import 'register_volunteer_page.dart';
 
 import '../donor/donor_dashboard.dart';
 import '../receiver/receiver_dashboard.dart';
@@ -33,6 +34,10 @@ class _LoginPageState extends State<LoginPage> {
         MaterialPageRoute(builder: (context) => RegisterReceiverPage()),
       );
     } else if (widget.role == 'Relawan') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => RegisterVolunteerPage()),
+      );
     } else {
       Navigator.push(
         context,
