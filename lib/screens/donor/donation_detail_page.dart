@@ -38,12 +38,23 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
       );
 
       if (response.statusCode == 200) {
+        final decodedData = jsonDecode(response.body);
         setState(() {
-          _donationData = jsonDecode(response.body)['data'] ?? {};
+          _donationData = decodedData['data'] ?? {};
           _isLoading = false;
         });
       } else {
+        // FIX: Tangkap error dari backend agar tidak cuma blank "-"
+        final err = jsonDecode(response.body);
         setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Error API: ${err['message']}"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       setState(() => _isLoading = false);
@@ -126,7 +137,7 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
     }
 
     // ==========================================
-    // DATA SESUAI COLLECTION MONGODB (NO DUMMY)
+    // PARSING DATA SESUAI MONGODB
     // ==========================================
     final foodName = _donationData['name']?.toString() ?? '-';
     final portion = _donationData['portion']?.toString() ?? '-';
@@ -140,23 +151,20 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
     if (rawDate != null) {
       try {
         DateTime parsedDate;
-        // Cek jika formatnya Map {"$date": "..."}
+
         if (rawDate is Map && rawDate.containsKey('\$date')) {
           parsedDate = DateTime.parse(rawDate['\$date'].toString()).toLocal();
-        }
-        // Jika formatnya sudah berupa String ISO
-        else {
+        } else {
           parsedDate = DateTime.parse(rawDate.toString()).toLocal();
         }
 
-        // Format ke tampilan yang rapi: DD-MM-YYYY HH:mm
         String day = parsedDate.day.toString().padLeft(2, '0');
         String month = parsedDate.month.toString().padLeft(2, '0');
         String year = parsedDate.year.toString();
         String hour = parsedDate.hour.toString().padLeft(2, '0');
         String minute = parsedDate.minute.toString().padLeft(2, '0');
 
-        collectionDateStr = "$day-$month-$year $hour:$minute";
+        collectionDateStr = "$year-$month-$day $hour:$minute";
       } catch (e) {
         collectionDateStr = rawDate.toString();
       }
@@ -188,7 +196,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
         ),
       ),
 
-      // TOMBOL BATALKAN DI BAWAH JIKA STATUS MASIH MENUNGGU
       bottomNavigationBar:
           (status == 'available' ||
               status == 'waiting_donor' ||
@@ -235,7 +242,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // CARD 1: INFO STATUS UTAMA
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -307,7 +313,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
             ),
             const SizedBox(height: 16),
 
-            // CARD 2: DETAIL SPESIFIK MAKANAN
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -322,7 +327,7 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
                     padding: EdgeInsets.symmetric(vertical: 8),
                     child: Divider(),
                   ),
-                  _buildDetailRow("Jumlah Porsi", "$portion Porsi"),
+                  _buildDetailRow("Jumlah Porsi", portion),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
                     child: Divider(),
@@ -343,7 +348,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
             ),
             const SizedBox(height: 16),
 
-            // CARD 3: WAKTU / TANGGAL
             Container(
               padding: const EdgeInsets.all(20),
               width: double.infinity,
@@ -355,15 +359,15 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  const Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.access_time_rounded,
                         color: Colors.orange,
                         size: 20,
                       ),
-                      const SizedBox(width: 8),
-                      const Text(
+                      SizedBox(width: 8),
+                      Text(
                         "Batas Waktu Pengambilan",
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
@@ -386,7 +390,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
             ),
             const SizedBox(height: 24),
 
-            // GAMBAR MAKANAN (Hanya muncul jika URL tidak kosong/null)
             if (fullImageUrl != null) ...[
               const Text(
                 "Foto Dokumentasi",
@@ -418,7 +421,6 @@ class _DonationDetailPageState extends State<DonationDetailPage> {
                 ),
               ),
             ],
-
             const SizedBox(height: 20),
           ],
         ),
